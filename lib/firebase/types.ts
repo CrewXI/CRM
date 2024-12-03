@@ -1,5 +1,9 @@
 import { Timestamp } from 'firebase/firestore';
+import { TERMINOLOGY, FIELDS } from '../constants';
 
+/**
+ * Base contact interface containing common fields for both individual and business contacts
+ */
 export interface BaseContact {
   id: string;
   userId: string;
@@ -14,7 +18,7 @@ export interface BaseContact {
   lastModified: Timestamp;
   address?: {
     street?: string;
-    suite?: string;
+    apt?: string;
     city?: string;
     state?: string;
     zipCode?: string;
@@ -26,8 +30,12 @@ export interface BaseContact {
     instagram?: string;
     facebook?: string;
   };
+  group?: string; // Reference to associated group ID
 }
 
+/**
+ * Individual contact interface extending the base contact interface
+ */
 export interface IndividualContact extends BaseContact {
   type: 'individual';
   firstName: string;
@@ -37,15 +45,25 @@ export interface IndividualContact extends BaseContact {
   businessId?: string; // Reference to associated business contact
 }
 
+/**
+ * Business contact interface extending the base contact interface
+ */
 export interface BusinessContact extends BaseContact {
   type: 'business';
   businessName: string;
+  industry?: string;
   employees?: string[]; // Array of individual contact IDs associated with this business
 }
 
+/**
+ * Union type representing either an individual or business contact
+ */
 export type Contact = IndividualContact | BusinessContact;
 
-export interface Category {
+/**
+ * Group interface representing a collection of contacts
+ */
+export interface Group {
   id: string;
   userId: string;
   name: string;
@@ -54,6 +72,9 @@ export interface Category {
   lastModified: Timestamp;
 }
 
+/**
+ * Segment interface representing a set of rules to filter contacts
+ */
 export interface Segment {
   id: string;
   userId: string;
@@ -68,12 +89,18 @@ export interface Segment {
   lastModified: Timestamp;
 }
 
+/**
+ * Contact segment interface representing the association between a contact and a segment
+ */
 export interface ContactSegment {
   contactId: string;
   segmentId: string;
   dateAdded: Timestamp;
 }
 
+/**
+ * User settings interface representing the user's preferences
+ */
 export interface UserSettings {
   userId: string;
   defaultView: 'all' | 'individual' | 'business';

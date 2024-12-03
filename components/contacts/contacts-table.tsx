@@ -38,6 +38,7 @@ import {
   SelectLabel
 } from "../ui/select"
 import { Timestamp } from 'firebase/firestore';
+import { FIELDS, LABELS, TABLE_COLUMNS, TERMINOLOGY } from "@/lib/constants";
 
 // Type guard functions for Contact types
 function isIndividualContact(contact: Contact): contact is IndividualContact {
@@ -80,24 +81,28 @@ export function ContactsTable({ data }: ContactsTableProps) {
         case 'name':
           aValue = a.type === 'individual' 
             ? `${a.firstName} ${a.lastName}` 
-            : a.businessName;
+            : '';
           bValue = b.type === 'individual'
             ? `${b.firstName} ${b.lastName}`
-            : b.businessName;
+            : '';
           break;
         case 'company':
-          aValue = a.type === 'individual' ? a.company : '';
-          bValue = b.type === 'individual' ? b.company : '';
+          aValue = a.type === 'individual'
+            ? (a.company || '')
+            : (a.businessName || '');
+          bValue = b.type === 'individual'
+            ? (b.company || '')
+            : (b.businessName || '');
+          break;
+        case TERMINOLOGY.GROUP:
+          aValue = a[TERMINOLOGY.GROUP] || '';
+          bValue = b[TERMINOLOGY.GROUP] || '';
           break;
         case 'email':
           aValue = a.email || '';
           bValue = b.email || '';
           break;
-        case 'category':
-          aValue = a.category || '';
-          bValue = b.category || '';
-          break;
-        case 'city':
+        case 'town':
           aValue = a.address?.city || '';
           bValue = b.address?.city || '';
           break;
@@ -311,18 +316,18 @@ export function ContactsTable({ data }: ContactsTableProps) {
                   {activeTab === "individual" ? (
                     <SortableHeader column="name" label="Name" />
                   ) : activeTab === "business" ? (
-                    <SortableHeader column="name" label="Business Name" />
+                    <SortableHeader column="name" label="Name" />
                   ) : (
-                    <SortableHeader column="name" label="Name/Business" />
+                    <SortableHeader column="name" label="Name" />
                   )}
-                  {activeTab !== "business" && <SortableHeader column="company" label="Company" />}
+                  <SortableHeader column="company" label="Company" />
                   <SortableHeader column="email" label="Email" />
                   <TableHead>Phone</TableHead>
                   <TableHead>Social</TableHead>
-                  <SortableHeader column="category" label="Category" />
                   <TableHead>Tags</TableHead>
-                  <SortableHeader column="city" label="City" />
-                  <SortableHeader column="state" label="State" />
+                  <SortableHeader column={TERMINOLOGY.GROUP} label={TERMINOLOGY.GROUP_LABEL} />
+                  <SortableHeader column="town" label={LABELS[FIELDS.ADDRESS_TOWN]} />
+                  <SortableHeader column="state" label={LABELS[FIELDS.ADDRESS_STATE]} />
                   <SortableHeader column="dateAdded" label="Date Added" />
                   <TableHead>Actions</TableHead>
                 </TableRow>
@@ -339,13 +344,13 @@ export function ContactsTable({ data }: ContactsTableProps) {
                     <TableCell>
                       {contact.type === 'individual' 
                         ? `${contact.firstName} ${contact.lastName}`
-                        : contact.businessName}
+                        : '-'}
                     </TableCell>
-                    {activeTab !== "business" && (
-                      <TableCell>
-                        {contact.type === 'individual' ? (contact.company || '-') : '-'}
-                      </TableCell>
-                    )}
+                    <TableCell>
+                      {contact.type === 'individual' 
+                        ? (contact.company || '-') 
+                        : (contact.businessName || '-')}
+                    </TableCell>
                     <TableCell>{contact.email || '-'}</TableCell>
                     <TableCell>{contact.phone || '-'}</TableCell>
                     <TableCell>
@@ -357,10 +362,10 @@ export function ContactsTable({ data }: ContactsTableProps) {
                         {contact.website && <SocialIcon platform="website" url={contact.website} />}
                       </div>
                     </TableCell>
-                    <TableCell>{contact.category || '-'}</TableCell>
                     <TableCell>
                       <TagList tags={contact.tags || []} />
                     </TableCell>
+                    <TableCell>{contact[TERMINOLOGY.GROUP] || '-'}</TableCell>
                     <TableCell>{contact.address?.city || '-'}</TableCell>
                     <TableCell>{contact.address?.state || '-'}</TableCell>
                     <TableCell>{contact.dateAdded ? contact.dateAdded.toDate().toLocaleDateString() : '-'}</TableCell>
@@ -393,10 +398,10 @@ export function ContactsTable({ data }: ContactsTableProps) {
             </SelectTrigger>
             <SelectContent>
               <SelectGroup>
-                <SelectItem value="category">Category</SelectItem>
                 <SelectItem value="tags">Tags</SelectItem>
-                <SelectItem value="address.city">City</SelectItem>
-                <SelectItem value="address.state">State</SelectItem>
+                <SelectItem value={TERMINOLOGY.GROUP}>{TERMINOLOGY.GROUP_LABEL}</SelectItem>
+                <SelectItem value={`address.${FIELDS.ADDRESS_TOWN}`}>{LABELS[FIELDS.ADDRESS_TOWN]}</SelectItem>
+                <SelectItem value={`address.${FIELDS.ADDRESS_STATE}`}>{LABELS[FIELDS.ADDRESS_STATE]}</SelectItem>
               </SelectGroup>
             </SelectContent>
           </Select>
@@ -451,22 +456,26 @@ export function ContactsTable({ data }: ContactsTableProps) {
   )
 }
 
-function ContactsList({ data }: { data: Contact[] }) {
+function ContactsList({ data, activeTab }: { data: Contact[], activeTab: string }) {
   return (
     <div className="rounded-md border">
       <Table>
         <TableHeader>
           <TableRow>
             <TableHead className="w-12"><Checkbox /></TableHead>
-            <TableHead>Name</TableHead>
-            <TableHead>Company</TableHead>
+            <TableHead>
+              {activeTab === 'business' ? TABLE_COLUMNS.BUSINESS.COMPANY : TABLE_COLUMNS.INDIVIDUAL.NAME}
+            </TableHead>
+            <TableHead>
+              {activeTab === 'business' ? TABLE_COLUMNS.BUSINESS.INDUSTRY : TABLE_COLUMNS.INDIVIDUAL.COMPANY}
+            </TableHead>
             <TableHead>Email</TableHead>
             <TableHead>Phone</TableHead>
             <TableHead>Social</TableHead>
-            <TableHead>Category</TableHead>
             <TableHead>Tags</TableHead>
-            <TableHead>City</TableHead>
-            <TableHead>State</TableHead>
+            <TableHead>{TERMINOLOGY.GROUP_LABEL}</TableHead>
+            <TableHead>{LABELS[FIELDS.ADDRESS_TOWN]}</TableHead>
+            <TableHead>{LABELS[FIELDS.ADDRESS_STATE]}</TableHead>
             <TableHead>Date Added</TableHead>
             <TableHead>Actions</TableHead>
           </TableRow>
@@ -481,13 +490,15 @@ function ContactsList({ data }: { data: Contact[] }) {
                   : contact.businessName}
               </TableCell>
               <TableCell>
-                {contact.type === 'individual' ? (contact.company || '-') : '-'}
+                {contact.type === 'individual' 
+                  ? (contact.company || '-') 
+                  : (contact.type === 'business' ? (contact.industry || '-') : '-')}
               </TableCell>
               <TableCell>{contact.email || '-'}</TableCell>
               <TableCell>{contact.phone || '-'}</TableCell>
               <TableCell>-</TableCell>
-              <TableCell>{contact.category}</TableCell>
               <TableCell>{Array.isArray(contact.tags) ? contact.tags.join(', ') : (contact.tags || '-')}</TableCell>
+              <TableCell>{contact[TERMINOLOGY.GROUP] || '-'}</TableCell>
               <TableCell>{contact.address?.city || '-'}</TableCell>
               <TableCell>{contact.address?.state || '-'}</TableCell>
               <TableCell>{contact.dateAdded ? contact.dateAdded.toDate().toLocaleDateString() : '-'}</TableCell>

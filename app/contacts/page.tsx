@@ -1,103 +1,90 @@
 "use client"
 
-import React, { useState } from "react"
+import React, { useState, useEffect } from "react"
 import { Button } from "../../components/ui/button"
 import { Input } from "../../components/ui/input"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs"
 import { ContactsTable } from "../../components/contacts/contacts-table"
-import { Download, Upload } from 'lucide-react'
+import { Settings, Search } from 'lucide-react'
 import type { Contact } from "../../types/contacts"
 import { AddContactDialog } from "../../components/contacts/add-contact-dialog"
-import { CustomizeViewDialog } from "../../components/contacts/customize-view-dialog"
-
-// Sample data - replace with your actual data source
-const sampleData: Contact[] = [
-  {
-    id: "1",
-    name: "Russell McEacharn",
-    email: "russell.mceacharn@gmail.com",
-    phone: "5123482045",
-    category: "Leads",
-    tags: ["developer", "businessowner"],
-    dateAdded: "12/01/24",
-    type: "individual"
-  },
-  {
-    id: "2",
-    name: "Boko Media",
-    category: "Lead Scraping",
-    tags: ["videographers"],
-    dateAdded: "12/01/24",
-    website: "https://bokomedia.com",
-    type: "business"
-  },
-]
+import { useAuth } from "../../contexts/auth-context"
+import { contactsService } from "../../lib/firebase/services"
 
 export default function ContactsPage() {
   const [searchTerm, setSearchTerm] = useState("")
+  const [contacts, setContacts] = useState<Contact[]>([])
+  const [loading, setLoading] = useState(true)
+  const { user } = useAuth()
 
-  const individuals = sampleData.filter(contact => 
-    contact.type === "individual" &&
-    (contact.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-     contact.email?.toLowerCase().includes(searchTerm.toLowerCase()))
-  )
+  useEffect(() => {
+    if (!user?.uid) {
+      setLoading(false)
+      return
+    }
+    
+    // Set up real-time listener
+    const unsubscribe = contactsService.subscribeToContacts((updatedContacts) => {
+      setContacts(updatedContacts)
+      setLoading(false)
+    }, user.uid)
 
-  const businesses = sampleData.filter(contact => 
-    contact.type === "business" &&
-    (contact.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-     contact.email?.toLowerCase().includes(searchTerm.toLowerCase()))
-  )
+    // Cleanup subscription on unmount
+    return () => unsubscribe()
+  }, [user?.uid])
+
+  if (loading) {
+    return <div className="flex items-center justify-center h-screen">Loading contacts...</div>
+  }
+
+  if (!user) {
+    return <div className="flex items-center justify-center h-screen">Please log in to view contacts.</div>
+  }
+
+  const filteredContacts = contacts.filter(contact => {
+    const searchLower = searchTerm.toLowerCase()
+    return (
+      contact.firstName?.toLowerCase().includes(searchLower) ||
+      contact.lastName?.toLowerCase().includes(searchLower) ||
+      contact.email?.toLowerCase().includes(searchLower) ||
+      contact.company?.toLowerCase().includes(searchLower)
+    )
+  })
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 md:text-3xl">Contacts</h1>
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          <CustomizeViewDialog />
-          <AddContactDialog />
+    <div className="h-full flex-1 flex flex-col gap-8 p-8">
+      <div className="flex flex-col gap-4">
+        {/* Header Section */}
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Contacts</h1>
+            <p className="text-sm text-muted-foreground mt-1">
+              Manage and organize your contacts efficiently
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm">
+              <Settings className="h-4 w-4" />
+            </Button>
+            <AddContactDialog />
+          </div>
+        </div>
+        
+        {/* Search Bar */}
+        <div className="flex w-full max-w-sm items-center space-x-2">
+          <Input
+            placeholder="Search contacts..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="h-9"
+          />
+          <Button variant="outline" size="sm" className="px-3">
+            <Search className="h-4 w-4" />
+          </Button>
         </div>
       </div>
 
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-        <Input
-          placeholder="Search contacts..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="sm:max-w-xs"
-        />
-      </div>
-
-      <div className="flex flex-1 justify-end gap-2">
-        <Button variant="outline">
-          <Upload className="mr-2 h-4 w-4" />
-          Import
-        </Button>
-        <Button variant="outline">
-          <Download className="mr-2 h-4 w-4" />
-          Export
-        </Button>
-      </div>
-
-      <Tabs defaultValue="individuals" className="w-full">
-        <TabsList className="w-full">
-          <TabsTrigger value="individuals" className="flex-1">Individuals</TabsTrigger>
-          <TabsTrigger value="businesses" className="flex-1">Businesses</TabsTrigger>
-        </TabsList>
-        <TabsContent value="individuals" className="mt-4">
-          <div className="rounded-lg border bg-white shadow-sm dark:bg-gray-800">
-            <div className="overflow-x-auto">
-              <ContactsTable data={individuals} type="individual" />
-            </div>
-          </div>
-        </TabsContent>
-        <TabsContent value="businesses" className="mt-4">
-          <div className="rounded-lg border bg-white shadow-sm dark:bg-gray-800">
-            <div className="overflow-x-auto">
-              <ContactsTable data={businesses} type="business" />
-            </div>
-          </div>
-        </TabsContent>
-      </Tabs>
+      {/* Contacts Table */}
+      <ContactsTable data={filteredContacts} />
     </div>
   )
 }

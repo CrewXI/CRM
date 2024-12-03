@@ -2,10 +2,10 @@ import type { Metadata } from "next"
 import { Inter } from "next/font/google"
 import "./globals.css"
 import { ThemeProvider } from "../components/theme-provider"
-import { SidebarNav } from "../components/layouts/sidebar-nav"
-import { Button } from "../components/ui/button"
-import { LogOut } from 'lucide-react'
+import { AuthProvider } from "../contexts/auth-context"
+import { AppLayout } from "../components/layouts/app-layout"
 import React from 'react'
+import { Toaster } from "sonner";
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -20,7 +20,7 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body className={inter.className}>
         <ThemeProvider
           attribute="class"
@@ -28,23 +28,12 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <div className="flex min-h-screen">
-            <aside className="hidden w-64 border-r lg:block">
-              <div className="flex h-full flex-col gap-4 p-6">
-                <div className="flex items-center gap-2">
-                  <h1 className="text-2xl font-bold">CRM Project</h1>
-                </div>
-                <SidebarNav />
-                <Button variant="ghost" className="mt-auto w-full justify-start">
-                  <LogOut className="mr-2 h-4 w-4" />
-                  Logout
-                </Button>
-              </div>
-            </aside>
-            <main className="flex-1">
+          <AuthProvider>
+            <AppLayout>
               {children}
-            </main>
-          </div>
+            </AppLayout>
+          </AuthProvider>
+          <Toaster />
         </ThemeProvider>
       </body>
     </html>

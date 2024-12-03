@@ -9,6 +9,7 @@ import { Input } from "../ui/input"
 import { Textarea } from "../ui/textarea"
 import { StateCombobox } from "../ui/state-combobox"
 import { CountryCombobox } from "../ui/country-combobox"
+import { CompanyCombobox } from "../ui/company-combobox"
 import { Contact, IndividualContact, BusinessContact } from "@/lib/firebase/types"
 import { TERMINOLOGY, FIELDS, LABELS } from '@/lib/constants'
 import {
@@ -28,7 +29,6 @@ export const formSchema = z.object({
   email: z.string().email().optional(),
   phone: z.string().optional(),
   jobTitle: z.string().optional(),
-  industry: z.string().optional(),
   businessName: z.string().optional(),
   website: z.string()
     .refine(
@@ -36,6 +36,10 @@ export const formSchema = z.object({
       { message: 'Website must start with https://' }
     )
     .optional(),
+  companyId: z.string().optional(),
+  company: z.string().optional(),
+  businessWebsite: z.string().optional(),
+  industry: z.string().optional(),
   [TERMINOLOGY.GROUP]: z.string().optional(),
   segments: z.string().optional(),
   tags: z.array(z.string()).optional(),
@@ -58,7 +62,7 @@ export const formSchema = z.object({
   if (data.type === "individual") {
     return data.firstName && data.lastName;
   }
-  return true;
+  return data.businessName;
 }, {
   message: "Please fill in all required fields",
   path: ["type"],
@@ -109,10 +113,14 @@ export function ContactForm({
         [FIELDS.ADDRESS_ZIP]: "",
         [FIELDS.ADDRESS_COUNTRY]: "United States",
       },
+      company: "",
+      companyId: "",
+      businessWebsite: "",
     },
   })
 
   const contactType = form.watch("type")
+  const values = form.getValues()
 
   return (
     <Form {...form}>
@@ -177,50 +185,73 @@ export function ContactForm({
           />
         )}
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {values.type === "individual" && (
           <FormField
             control={form.control}
-            name="website"
+            name="company"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Website</FormLabel>
+                <FormLabel>Company</FormLabel>
                 <FormControl>
-                  <Input {...field} placeholder="https://" value={field.value || ''} />
+                  <CompanyCombobox
+                    value={field.value}
+                    onSelect={(value, company) => {
+                      // Update company-related fields
+                      form.setValue("company", value);
+                      if (company) {
+                        form.setValue("companyId", company.id);
+                        form.setValue("businessWebsite", company.website);
+                        form.setValue("industry", company.industry);
+                      } else {
+                        form.setValue("companyId", undefined);
+                        form.setValue("businessWebsite", undefined);
+                        form.setValue("industry", undefined);
+                      }
+                    }}
+                    onCreateNew={(value) => {
+                      // Handle creating new company
+                      form.setValue("company", value);
+                      form.setValue("companyId", undefined);
+                    }}
+                  />
                 </FormControl>
                 <FormMessage />
               </FormItem>
             )}
           />
-          {contactType === 'individual' ? (
-            <FormField
-              control={form.control}
-              name="jobTitle"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Job Title</FormLabel>
-                  <FormControl>
-                    <Input {...field} value={field.value || ''} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          ) : (
-            <FormField
-              control={form.control}
-              name="industry"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Industry</FormLabel>
-                  <FormControl>
-                    <Input {...field} value={field.value || ''} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          )}
-        </div>
+        )}
+
+        {(values.type === "business" || (values.type === "individual" && values.company)) && (
+          <FormField
+            control={form.control}
+            name="industry"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Industry</FormLabel>
+                <FormControl>
+                  <Input {...field} disabled={values.type === "individual"} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        )}
+
+        {(values.type === "business" || (values.type === "individual" && values.company)) && (
+          <FormField
+            control={form.control}
+            name={values.type === "business" ? "website" : "businessWebsite"}
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Website</FormLabel>
+                <FormControl>
+                  <Input {...field} disabled={values.type === "individual"} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        )}
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <FormField

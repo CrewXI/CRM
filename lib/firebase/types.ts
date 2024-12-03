@@ -30,7 +30,7 @@ export interface BaseContact {
     instagram?: string;
     facebook?: string;
   };
-  group?: string; // Reference to associated group ID
+  group?: string;
 }
 
 /**
@@ -41,8 +41,10 @@ export interface IndividualContact extends BaseContact {
   firstName: string;
   lastName: string;
   jobTitle?: string;
-  company?: string;
-  businessId?: string; // Reference to associated business contact
+  companyId?: string;  // Reference to the business contact
+  company?: string;    // Denormalized company name for quick access
+  businessWebsite?: string;  // Denormalized from business contact
+  industry?: string;   // Denormalized from business contact
 }
 
 /**
@@ -52,7 +54,7 @@ export interface BusinessContact extends BaseContact {
   type: 'business';
   businessName: string;
   industry?: string;
-  employees?: string[]; // Array of individual contact IDs associated with this business
+  employeeCount?: number;  // Count of linked individual contacts
 }
 
 /**

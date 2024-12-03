@@ -8,7 +8,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Contact } from "@/lib/firebase/types"
-import { updateContact, deleteContact } from "@/lib/firebase/services"
+import { contactsService } from "@/lib/firebase/services"
 import { toast } from "sonner"
 import { X } from "lucide-react"
 import { ContactForm, formSchema } from "./contact-form"
@@ -29,26 +29,41 @@ export function EditContactDialog({
 }: EditContactDialogProps) {
   const handleSubmit = async (values: z.infer<typeof formSchema>) => {
     try {
-      await updateContact(contact.id!, values as Contact)
-      toast.success("Contact updated successfully")
-      onContactUpdated()
-      onOpenChange(false)
+      // Prepare updates based on contact type
+      const updates: Partial<Contact> = {
+        ...values,
+      };
+
+      // For individual contacts, handle company-related fields
+      if (contact.type === 'individual') {
+        if (values.company !== contact.company) {
+          updates.companyId = values.companyId;
+          updates.company = values.company;
+          updates.businessWebsite = values.businessWebsite;
+          updates.industry = values.industry;
+        }
+      }
+
+      await contactsService.updateContact(contact.id!, updates);
+      toast.success("Contact updated successfully");
+      onContactUpdated();
+      onOpenChange(false);
     } catch (error) {
-      console.error("Error updating contact:", error)
-      toast.error("Failed to update contact")
+      console.error("Error updating contact:", error);
+      toast.error("Failed to update contact");
     }
   }
 
   const handleDelete = async () => {
     if (window.confirm("Are you sure you want to delete this contact?")) {
       try {
-        await deleteContact(contact.id!)
-        toast.success("Contact deleted successfully")
-        onContactUpdated()
-        onOpenChange(false)
+        await contactsService.deleteContact(contact.id!);
+        toast.success("Contact deleted successfully");
+        onContactUpdated();
+        onOpenChange(false);
       } catch (error) {
-        console.error("Error deleting contact:", error)
-        toast.error("Failed to delete contact")
+        console.error("Error deleting contact:", error);
+        toast.error("Failed to delete contact");
       }
     }
   }

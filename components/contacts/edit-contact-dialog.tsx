@@ -75,6 +75,9 @@ export function EditContactDialog({
     if (field === 'jobTitle' && isIndividualContact(formData)) {
       return formData.jobTitle ?? '';
     }
+    if (field === 'company' && isIndividualContact(formData)) {
+      return formData.company ?? '';
+    }
     if (field === 'companyName' && isBusinessContact(formData)) {
       return formData.businessName ?? '';
     }
@@ -133,27 +136,31 @@ export function EditContactDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[80vh] max-w-2xl overflow-y-auto">
-        <DialogHeader className="sticky top-0 bg-background z-50 pb-4 mb-4 border-b">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="absolute right-0 top-0"
-            onClick={() => onOpenChange(false)}
-          >
-            <X className="h-4 w-4" />
-          </Button>
-          <DialogTitle>Edit Contact</DialogTitle>
-          <DialogDescription>
-            Update contact information below.
-          </DialogDescription>
-        </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid gap-4 py-4">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto !p-0 gap-0">
+        <div className="bg-background px-6 py-3 border-b z-50">
+          <DialogHeader className="relative space-y-0 !space-y-0">
+            <div className="flex items-center justify-between">
+              <DialogTitle className="text-lg leading-none">Edit Contact</DialogTitle>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="-mr-2"
+                onClick={() => onOpenChange(false)}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            <DialogDescription className="text-sm leading-none mt-1.5">
+              Update contact information below.
+            </DialogDescription>
+          </DialogHeader>
+        </div>
+        <div className="p-6">
+          <form onSubmit={handleSubmit} className="space-y-4">
             {formData.type === 'individual' ? (
-              <>
+              <div className="grid gap-4 py-4">
                 <div className="grid gap-4 sm:grid-cols-2">
-                  <div>
+                  <div className="space-y-1.5">
                     <Label htmlFor="firstName">First Name</Label>
                     <Input
                       id="firstName"
@@ -162,7 +169,7 @@ export function EditContactDialog({
                       onChange={handleInputChange}
                     />
                   </div>
-                  <div>
+                  <div className="space-y-1.5">
                     <Label htmlFor="lastName">Last Name</Label>
                     <Input
                       id="lastName"
@@ -173,7 +180,16 @@ export function EditContactDialog({
                   </div>
                 </div>
                 <div className="grid gap-4 sm:grid-cols-2">
-                  <div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="company">Company</Label>
+                    <Input
+                      id="company"
+                      name="company"
+                      value={getFieldValue('company')}
+                      onChange={handleInputChange}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
                     <Label htmlFor="jobTitle">Job Title</Label>
                     <Input
                       id="jobTitle"
@@ -182,9 +198,33 @@ export function EditContactDialog({
                       onChange={handleInputChange}
                     />
                   </div>
-                  <div>
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="email">Email</Label>
+                    <Input
+                      id="email"
+                      name="email"
+                      type="email"
+                      value={formData.email || ""}
+                      onChange={handleInputChange}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="phone">Phone</Label>
+                    <Input
+                      id="phone"
+                      name="phone"
+                      value={formData.phone || ""}
+                      onChange={handleInputChange}
+                    />
+                  </div>
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-1.5">
                     <Label htmlFor="website">Website</Label>
                     <Input
+                      id="website"
                       name="website"
                       value={formData.website || "https://"}
                       onChange={(e) => {
@@ -201,160 +241,211 @@ export function EditContactDialog({
                       }}
                     />
                   </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="country">Country</Label>
+                    <Input
+                      id="country"
+                      placeholder="Country"
+                      name="address.country"
+                      value={formData.address?.country || ""}
+                      onChange={(e) => {
+                        const newCountry = e.target.value;
+                        setFormData((prev) => ({
+                          ...prev,
+                          address: {
+                            ...prev.address,
+                            country: newCountry,
+                            state: newCountry !== "United States" ? "" : prev.address?.state
+                          },
+                        }));
+                      }}
+                    />
+                  </div>
                 </div>
-              </>
+              </div>
             ) : (
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div>
-                  <Label htmlFor="companyName">Company Name</Label>
-                  <Input
-                    id="companyName"
-                    name="businessName"
-                    value={getFieldValue('companyName')}
-                    onChange={handleInputChange}
-                  />
+              <div className="grid gap-4 py-4">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="companyName">Company Name</Label>
+                    <Input
+                      id="companyName"
+                      name="businessName"
+                      value={getFieldValue('companyName')}
+                      onChange={handleInputChange}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="category">Category</Label>
+                    <Select
+                      value={formData.category || ""}
+                      onValueChange={(value) => handleSelectChange(value, "category")}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a category" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="client">Client</SelectItem>
+                        <SelectItem value="prospect">Prospect</SelectItem>
+                        <SelectItem value="partner">Partner</SelectItem>
+                        <SelectItem value="vendor">Vendor</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
-                <div>
-                  <Label htmlFor="website">Website</Label>
-                  <Input
-                    name="website"
-                    value={formData.website || "https://"}
-                    onChange={(e) => {
-                      let value = e.target.value;
-                      if (!value.startsWith('https://')) {
-                        value = 'https://' + value.replace('https://', '');
-                      }
-                      setFormData((prev) => ({ ...prev, website: value }));
-                    }}
-                    onFocus={(e) => {
-                      if (e.target.value === 'https://') {
-                        e.target.setSelectionRange(8, 8);
-                      }
-                    }}
-                  />
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="email">Email</Label>
+                    <Input
+                      id="email"
+                      name="email"
+                      type="email"
+                      value={formData.email || ""}
+                      onChange={handleInputChange}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="phone">Phone</Label>
+                    <Input
+                      id="phone"
+                      name="phone"
+                      value={formData.phone || ""}
+                      onChange={handleInputChange}
+                    />
+                  </div>
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="website">Website</Label>
+                    <Input
+                      id="website"
+                      name="website"
+                      value={formData.website || "https://"}
+                      onChange={(e) => {
+                        let value = e.target.value;
+                        if (!value.startsWith('https://')) {
+                          value = 'https://' + value.replace('https://', '');
+                        }
+                        setFormData((prev) => ({ ...prev, website: value }));
+                      }}
+                      onFocus={(e) => {
+                        if (e.target.value === 'https://') {
+                          e.target.setSelectionRange(8, 8);
+                        }
+                      }}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="country">Country</Label>
+                    <Input
+                      id="country"
+                      placeholder="Country"
+                      name="address.country"
+                      value={formData.address?.country || ""}
+                      onChange={(e) => {
+                        const newCountry = e.target.value;
+                        setFormData((prev) => ({
+                          ...prev,
+                          address: {
+                            ...prev.address,
+                            country: newCountry,
+                            state: newCountry !== "United States" ? "" : prev.address?.state
+                          },
+                        }));
+                      }}
+                    />
+                  </div>
                 </div>
               </div>
             )}
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div>
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  name="email"
-                  type="email"
-                  value={formData.email || ""}
-                  onChange={handleInputChange}
-                />
-              </div>
-              <div>
-                <Label htmlFor="phone">Phone</Label>
-                <Input
-                  id="phone"
-                  name="phone"
-                  value={formData.phone || ""}
-                  onChange={handleInputChange}
-                />
-              </div>
-            </div>
-
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-4">
                 <Label>Social Media</Label>
-                <Input
-                  placeholder="LinkedIn"
-                  name="socialMedia.linkedin"
-                  value={formData.socialMedia?.linkedin || ""}
-                  onChange={handleInputChange}
-                />
-                <Input
-                  placeholder="Twitter"
-                  name="socialMedia.twitter"
-                  value={formData.socialMedia?.twitter || ""}
-                  onChange={handleInputChange}
-                />
-                <Input
-                  placeholder="Instagram"
-                  name="socialMedia.instagram"
-                  value={formData.socialMedia?.instagram || ""}
-                  onChange={handleInputChange}
-                />
-                <Input
-                  placeholder="Facebook"
-                  name="socialMedia.facebook"
-                  value={formData.socialMedia?.facebook || ""}
-                  onChange={handleInputChange}
-                />
+                <div className="grid grid-cols-2 gap-4">
+                  <Input
+                    placeholder="LinkedIn"
+                    name="socialMedia.linkedin"
+                    value={formData.socialMedia?.linkedin || ""}
+                    onChange={handleInputChange}
+                  />
+                  <Input
+                    placeholder="Twitter"
+                    name="socialMedia.twitter"
+                    value={formData.socialMedia?.twitter || ""}
+                    onChange={handleInputChange}
+                  />
+                  <Input
+                    placeholder="Facebook"
+                    name="socialMedia.facebook"
+                    value={formData.socialMedia?.facebook || ""}
+                    onChange={handleInputChange}
+                  />
+                  <Input
+                    placeholder="Instagram"
+                    name="socialMedia.instagram"
+                    value={formData.socialMedia?.instagram || ""}
+                    onChange={handleInputChange}
+                  />
+                </div>
               </div>
               <div className="space-y-4">
                 <Label>Address</Label>
-                <Input
-                  placeholder="Street Address"
-                  name="address.street"
-                  value={formData.address?.street || ""}
-                  onChange={handleInputChange}
-                />
-                <Input
-                  placeholder="Apt, Suite, etc."
-                  name="address.suite"
-                  value={formData.address?.suite || ""}
-                  onChange={handleInputChange}
-                />
-                <Input
-                  placeholder="City"
-                  name="address.city"
-                  value={formData.address?.city || ""}
-                  onChange={handleInputChange}
-                />
-                <div>
-                  <Label htmlFor="state">State</Label>
-                  <StateCombobox
-                    value={formData.address?.state || ""}
-                    onChange={(value) => {
-                      setFormData((prev) => ({
-                        ...prev,
-                        address: {
-                          ...prev.address,
-                          state: value,
-                        },
-                      }));
-                    }}
-                  />
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <Input
+                      placeholder="Street Address"
+                      name="address.street"
+                      value={formData.address?.street || ""}
+                      onChange={handleInputChange}
+                    />
+                    <Input
+                      placeholder="Apt, Suite, etc."
+                      name="address.suite"
+                      value={formData.address?.suite || ""}
+                      onChange={handleInputChange}
+                    />
+                  </div>
+                  <div className="grid grid-cols-3 gap-4">
+                    <Input
+                      placeholder="City"
+                      name="address.city"
+                      value={formData.address?.city || ""}
+                      onChange={handleInputChange}
+                    />
+                    {formData.address?.country === "United States" ? (
+                      <StateCombobox
+                        value={formData.address?.state || ""}
+                        onChange={(value) => {
+                          setFormData((prev) => ({
+                            ...prev,
+                            address: {
+                              ...prev.address,
+                              state: value,
+                            },
+                          }));
+                        }}
+                      />
+                    ) : (
+                      <Input
+                        id="state"
+                        placeholder="State/Province/Region"
+                        name="address.state"
+                        value={formData.address?.state || ""}
+                        onChange={handleInputChange}
+                      />
+                    )}
+                    <Input
+                      placeholder="ZIP Code"
+                      name="address.zipCode"
+                      value={formData.address?.zipCode || ""}
+                      onChange={handleInputChange}
+                    />
+                  </div>
                 </div>
-                <Input
-                  placeholder="ZIP Code"
-                  name="address.zipCode"
-                  value={formData.address?.zipCode || ""}
-                  onChange={handleInputChange}
-                />
-                <Input
-                  placeholder="Country"
-                  name="address.country"
-                  value={formData.address?.country || ""}
-                  onChange={handleInputChange}
-                />
               </div>
             </div>
-
             <div className="grid gap-4 sm:grid-cols-2">
-              <div>
-                <Label htmlFor="category">Category</Label>
-                <Select
-                  value={formData.category || ""}
-                  onValueChange={(value) => handleSelectChange(value, "category")}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a category" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="client">Client</SelectItem>
-                    <SelectItem value="prospect">Prospect</SelectItem>
-                    <SelectItem value="partner">Partner</SelectItem>
-                    <SelectItem value="vendor">Vendor</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
+              <div className="space-y-1.5">
                 <Label htmlFor="tags">Tags (comma-separated)</Label>
                 <Input
                   id="tags"
@@ -366,30 +457,29 @@ export function EditContactDialog({
                   }}
                 />
               </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="notes">Notes</Label>
+                <Textarea
+                  id="notes"
+                  name="notes"
+                  value={formData.notes || ""}
+                  onChange={handleInputChange}
+                />
+              </div>
             </div>
-
-            <div>
-              <Label htmlFor="notes">Notes</Label>
-              <Textarea
-                id="notes"
-                name="notes"
-                value={formData.notes || ""}
-                onChange={handleInputChange}
-              />
-            </div>
-          </div>
-          <DialogFooter className="gap-2">
-            <Button variant="destructive" type="button" onClick={handleDelete}>
-              Delete Contact
-            </Button>
-            <div className="flex gap-2 justify-end">
-              <Button variant="outline" type="button" onClick={() => onOpenChange(false)}>
-                Cancel
+            <DialogFooter className="gap-2">
+              <Button variant="destructive" type="button" onClick={handleDelete}>
+                Delete Contact
               </Button>
-              <Button type="submit">Save Changes</Button>
-            </div>
-          </DialogFooter>
-        </form>
+              <div className="flex gap-2 justify-end">
+                <Button variant="outline" type="button" onClick={() => onOpenChange(false)}>
+                  Cancel
+                </Button>
+                <Button type="submit">Save Changes</Button>
+              </div>
+            </DialogFooter>
+          </form>
+        </div>
       </DialogContent>
     </Dialog>
   );

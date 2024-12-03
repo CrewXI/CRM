@@ -41,15 +41,46 @@ export default function ContactsPage() {
   }
 
   const filteredContacts = contacts.filter(contact => {
-    const searchLower = searchTerm.toLowerCase()
-    return (
-      (contact.type === 'individual' && 
-        (contact.firstName?.toLowerCase().includes(searchLower) ||
-         contact.lastName?.toLowerCase().includes(searchLower))) ||
-      contact.email?.toLowerCase().includes(searchLower) ||
-      (contact.type === 'business' && 
-        contact.businessName?.toLowerCase().includes(searchLower))
-    )
+    if (!searchTerm) return true;
+    
+    const searchLower = searchTerm.toLowerCase();
+    
+    // Helper function to safely check if a string includes the search term
+    const includes = (value: string | null | undefined) => 
+      value?.toLowerCase().includes(searchLower) || false;
+    
+    // Common fields for both individual and business contacts
+    const commonFieldsMatch = 
+      includes(contact.email) ||
+      includes(contact.phone) ||
+      includes(contact.category) ||
+      includes(contact.address?.city) ||
+      includes(contact.address?.state) ||
+      includes(contact.address?.street) ||
+      includes(contact.address?.zipCode) ||
+      includes(contact.website) ||
+      (contact.tags && contact.tags.some(tag => includes(tag))) ||
+      // Search in social media links
+      includes(contact.socialMedia?.linkedin) ||
+      includes(contact.socialMedia?.twitter) ||
+      includes(contact.socialMedia?.facebook) ||
+      includes(contact.socialMedia?.instagram);
+
+    // Type-specific fields
+    if (contact.type === 'individual') {
+      return (
+        commonFieldsMatch ||
+        includes(contact.firstName) ||
+        includes(contact.lastName) ||
+        includes(contact.company) ||
+        includes(`${contact.firstName} ${contact.lastName}`) // Search full name
+      );
+    } else {
+      return (
+        commonFieldsMatch ||
+        includes(contact.businessName)
+      );
+    }
   })
 
   return (

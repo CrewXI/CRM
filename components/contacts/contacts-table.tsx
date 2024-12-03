@@ -20,7 +20,7 @@ import { Contact, IndividualContact, BusinessContact } from "@/lib/firebase/type
 import { contactsService } from '../../lib/firebase/services';
 import { toast } from "sonner"
 import { FaLinkedin, FaTwitter, FaInstagram, FaFacebook, FaGlobe } from "react-icons/fa"
-import { Facebook, Globe, Instagram, Linkedin, Pencil, Twitter, MoreHorizontal, Trash2 } from 'lucide-react'
+import { Facebook, Globe, Instagram, Linkedin, Pencil, Twitter, MoreHorizontal, Trash2, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
 import { cn } from "../../lib/utils"
 import {
   DropdownMenu,
@@ -57,13 +57,107 @@ export function ContactsTable({ data }: ContactsTableProps) {
   const [selectedContacts, setSelectedContacts] = useState<string[]>([])
   const [selectedField, setSelectedField] = useState<string>("")
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
-  const [editingContact, setEditingContact] = useState<Contact | null>(null);
+  const [editingContact, setEditingContact] = useState<Contact | null>(null)
+  const [sortConfig, setSortConfig] = useState<{
+    key: string;
+    direction: 'asc' | 'desc';
+  } | null>(null);
 
   const filteredData = data.filter(contact => {
     if (activeTab === "individual") return contact.type === "individual"
     if (activeTab === "business") return contact.type === "business"
     return true
   })
+
+  const sortData = (data: Contact[]) => {
+    if (!sortConfig) return data;
+
+    return [...data].sort((a, b) => {
+      let aValue: any;
+      let bValue: any;
+
+      switch (sortConfig.key) {
+        case 'name':
+          aValue = a.type === 'individual' 
+            ? `${a.firstName} ${a.lastName}` 
+            : a.businessName;
+          bValue = b.type === 'individual'
+            ? `${b.firstName} ${b.lastName}`
+            : b.businessName;
+          break;
+        case 'company':
+          aValue = a.type === 'individual' ? a.company : '';
+          bValue = b.type === 'individual' ? b.company : '';
+          break;
+        case 'email':
+          aValue = a.email || '';
+          bValue = b.email || '';
+          break;
+        case 'category':
+          aValue = a.category || '';
+          bValue = b.category || '';
+          break;
+        case 'city':
+          aValue = a.address?.city || '';
+          bValue = b.address?.city || '';
+          break;
+        case 'state':
+          aValue = a.address?.state || '';
+          bValue = b.address?.state || '';
+          break;
+        case 'dateAdded':
+          aValue = a.dateAdded ? a.dateAdded.toDate().getTime() : 0;
+          bValue = b.dateAdded ? b.dateAdded.toDate().getTime() : 0;
+          break;
+        default:
+          return 0;
+      }
+
+      if (aValue < bValue) {
+        return sortConfig.direction === 'asc' ? -1 : 1;
+      }
+      if (aValue > bValue) {
+        return sortConfig.direction === 'asc' ? 1 : -1;
+      }
+      return 0;
+    });
+  };
+
+  const handleSort = (key: string) => {
+    setSortConfig((currentConfig) => {
+      if (!currentConfig || currentConfig.key !== key) {
+        return { key, direction: 'asc' };
+      }
+      if (currentConfig.direction === 'asc') {
+        return { key, direction: 'desc' };
+      }
+      return null;
+    });
+  };
+
+  const SortableHeader = ({ column, label }: { column: string, label: string }) => {
+    const isActive = sortConfig?.key === column;
+    const direction = isActive ? sortConfig.direction : null;
+    
+    return (
+      <TableHead>
+        <Button
+          variant="ghost"
+          onClick={() => handleSort(column)}
+          className="h-8 flex items-center gap-1 font-semibold"
+        >
+          {label}
+          {direction === 'asc' ? (
+            <ArrowUp className="h-4 w-4" />
+          ) : direction === 'desc' ? (
+            <ArrowDown className="h-4 w-4" />
+          ) : (
+            <ArrowUpDown className="h-4 w-4" />
+          )}
+        </Button>
+      </TableHead>
+    );
+  };
 
   const handleSelectAll = (checked: boolean) => {
     if (checked) {
@@ -215,26 +309,26 @@ export function ContactsTable({ data }: ContactsTableProps) {
                     />
                   </TableHead>
                   {activeTab === "individual" ? (
-                    <TableHead>Name</TableHead>
+                    <SortableHeader column="name" label="Name" />
                   ) : activeTab === "business" ? (
-                    <TableHead>Business Name</TableHead>
+                    <SortableHeader column="name" label="Business Name" />
                   ) : (
-                    <TableHead>Name/Business</TableHead>
+                    <SortableHeader column="name" label="Name/Business" />
                   )}
-                  {activeTab !== "business" && <TableHead>Company</TableHead>}
-                  <TableHead>Email</TableHead>
+                  {activeTab !== "business" && <SortableHeader column="company" label="Company" />}
+                  <SortableHeader column="email" label="Email" />
                   <TableHead>Phone</TableHead>
                   <TableHead>Social</TableHead>
-                  <TableHead>Category</TableHead>
+                  <SortableHeader column="category" label="Category" />
                   <TableHead>Tags</TableHead>
-                  <TableHead>City</TableHead>
-                  <TableHead>State</TableHead>
-                  <TableHead>Date Added</TableHead>
+                  <SortableHeader column="city" label="City" />
+                  <SortableHeader column="state" label="State" />
+                  <SortableHeader column="dateAdded" label="Date Added" />
                   <TableHead>Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredData.map((contact) => (
+                {sortData(filteredData).map((contact) => (
                   <TableRow key={contact.id}>
                     <TableCell>
                       <Checkbox 

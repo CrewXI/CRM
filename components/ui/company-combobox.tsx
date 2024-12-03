@@ -1,25 +1,22 @@
 "use client"
 
 import * as React from "react"
-import { Check, ChevronsUpDown } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { Button } from "@/components/ui/button"
 import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-} from "@/components/ui/command"
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover"
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { BusinessContact } from "@/lib/firebase/types"
 import { useState, useEffect } from "react"
 import { contactsService } from "@/lib/firebase/services"
 import { useAuth } from "@/contexts/auth-context"
+import { toast } from "sonner"
+import { Button } from "@/components/ui/button"
+import { Plus } from "lucide-react"
 
 interface CompanyComboboxProps {
   value?: string
@@ -28,9 +25,7 @@ interface CompanyComboboxProps {
 }
 
 export function CompanyCombobox({ value, onSelect, onCreateNew }: CompanyComboboxProps) {
-  const [open, setOpen] = useState(false)
   const [companies, setCompanies] = useState<BusinessContact[]>([])
-  const [inputValue, setInputValue] = useState(value || "")
   const { user } = useAuth()
 
   // Fetch companies on component mount
@@ -43,71 +38,50 @@ export function CompanyCombobox({ value, onSelect, onCreateNew }: CompanyCombobo
         setCompanies(businessContacts);
       } catch (error) {
         console.error("Error fetching companies:", error);
+        toast.error("Failed to load companies");
       }
     };
 
     fetchCompanies();
   }, [user?.uid]);
 
+  const handleSelect = (currentValue: string) => {
+    const selectedCompany = companies.find(company => company.businessName === currentValue)
+    onSelect(currentValue, selectedCompany || null)
+  }
+
+  const handleCreateNew = () => {
+    if (onCreateNew) {
+      onCreateNew('New Company');
+    }
+  };
+
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
+    <div className="flex gap-2">
+      <Select value={value} onValueChange={handleSelect}>
+        <SelectTrigger className="w-full">
+          <SelectValue placeholder="Select company..." />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectGroup>
+            {companies.map((company) => (
+              <SelectItem key={company.id} value={company.businessName}>
+                {company.businessName}
+              </SelectItem>
+            ))}
+          </SelectGroup>
+        </SelectContent>
+      </Select>
+      {onCreateNew && (
         <Button
           variant="outline"
-          role="combobox"
-          aria-expanded={open}
-          className="w-full justify-between"
+          size="icon"
+          onClick={handleCreateNew}
+          title="Add new company"
         >
-          {inputValue || "Select company..."}
-          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+          <Plus className="h-4 w-4" />
         </Button>
-      </PopoverTrigger>
-      <PopoverContent className="w-full p-0">
-        <Command>
-          <CommandInput 
-            placeholder="Search company..." 
-            value={inputValue}
-            onValueChange={setInputValue}
-          />
-          <CommandEmpty>
-            {onCreateNew ? (
-              <Button
-                variant="ghost"
-                className="w-full justify-start"
-                onClick={() => {
-                  onCreateNew(inputValue)
-                  setOpen(false)
-                }}
-              >
-                Create "{inputValue}"
-              </Button>
-            ) : (
-              "No company found."
-            )}
-          </CommandEmpty>
-          <CommandGroup>
-            {companies.map((company) => (
-              <CommandItem
-                key={company.id}
-                value={company.businessName}
-                onSelect={() => {
-                  setInputValue(company.businessName)
-                  onSelect(company.businessName, company)
-                  setOpen(false)
-                }}
-              >
-                <Check
-                  className={cn(
-                    "mr-2 h-4 w-4",
-                    value === company.businessName ? "opacity-100" : "opacity-0"
-                  )}
-                />
-                {company.businessName}
-              </CommandItem>
-            ))}
-          </CommandGroup>
-        </Command>
-      </PopoverContent>
-    </Popover>
+      )}
+    </div>
   )
 }

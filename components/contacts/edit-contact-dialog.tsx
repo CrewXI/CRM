@@ -1,23 +1,22 @@
 "use client"
 
-import { Button } from "@/components/ui/button"
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
-import { Contact } from "@/lib/firebase/types"
+import { Button } from "../ui/button"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog"
+import { Contact, IndividualContact, BusinessContact } from "@/lib/firebase/types"
 import { contactsService } from "@/lib/firebase/services"
 import { toast } from "sonner"
 import { X } from "lucide-react"
 import { ContactForm, formSchema } from "./contact-form"
 import * as z from "zod"
+import { auth } from "@/lib/firebase/config"
+import { useState } from "react"
+import { useAuth } from "@/contexts/auth-context"
 
 interface EditContactDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   contact: Contact
+  companies: BusinessContact[]
   onContactUpdated: () => void
 }
 
@@ -25,26 +24,57 @@ export function EditContactDialog({
   open,
   onOpenChange,
   contact,
+  companies,
   onContactUpdated,
 }: EditContactDialogProps) {
   const handleSubmit = async (values: z.infer<typeof formSchema>) => {
     try {
-      // Prepare updates based on contact type
-      const updates: Partial<Contact> = {
-        ...values,
-      };
+      const userId = auth.currentUser?.uid;
+      if (!userId) {
+        toast.error('You must be logged in to update contacts');
+        return;
+      }
 
-      // For individual contacts, handle company-related fields
+      type Updates = Partial<IndividualContact | BusinessContact>;
+      const updates: Updates = {};
+
+      // Common fields
+      if (values.email !== contact.email) updates.email = values.email;
+      if (values.phone !== contact.phone) updates.phone = values.phone;
+      if (values.notes !== contact.notes) updates.notes = values.notes;
+      if (values.website !== contact.website) updates.website = values.website;
+      if (values.category !== contact.category) updates.category = values.category;
+      
       if (contact.type === 'individual') {
-        if (values.company !== contact.company) {
-          updates.companyId = values.companyId;
-          updates.company = values.company;
-          updates.businessWebsite = values.businessWebsite;
-          updates.industry = values.industry;
+        const individualContact = contact as IndividualContact;
+        
+        if (values.firstName && values.firstName !== individualContact.firstName) {
+          (updates as Partial<IndividualContact>).firstName = values.firstName;
+        }
+        if (values.lastName && values.lastName !== individualContact.lastName) {
+          (updates as Partial<IndividualContact>).lastName = values.lastName;
+        }
+        if (values.company && values.company !== individualContact.company) {
+          (updates as Partial<IndividualContact>).company = values.company;
+        }
+        if (values.jobTitle && values.jobTitle !== individualContact.jobTitle) {
+          (updates as Partial<IndividualContact>).jobTitle = values.jobTitle;
+        }
+        if (values.department && values.department !== individualContact.department) {
+          (updates as Partial<IndividualContact>).department = values.department;
+        }
+      } else if (contact.type === 'business') {
+        const businessContact = contact as BusinessContact;
+        
+        if (values.businessName && values.businessName !== businessContact.businessName) {
+          (updates as Partial<BusinessContact>).businessName = values.businessName;
+        }
+        if (values.industry && values.industry !== businessContact.industry) {
+          (updates as Partial<BusinessContact>).industry = values.industry;
         }
       }
 
-      await contactsService.updateContact(contact.id!, updates);
+      await contactsService.updateContact(contact.id!, updates, userId);
       toast.success("Contact updated successfully");
       onContactUpdated();
       onOpenChange(false);
@@ -54,19 +84,22 @@ export function EditContactDialog({
     }
   }
 
+  const [isDeleting, setIsDeleting] = useState(false)
+  const { user } = useAuth()
+
   const handleDelete = async () => {
-    if (window.confirm("Are you sure you want to delete this contact?")) {
-      try {
-        await contactsService.deleteContact(contact.id!);
-        toast.success("Contact deleted successfully");
-        onContactUpdated();
-        onOpenChange(false);
-      } catch (error) {
-        console.error("Error deleting contact:", error);
-        toast.error("Failed to delete contact");
-      }
+    if (!contact?.id || !user) return;
+    
+    setIsDeleting(true);
+    try {
+      await contactsService.deleteContact(contact.id, user.uid);
+      onOpenChange(false);
+    } catch (error) {
+      console.error('Error deleting contact:', error);
+    } finally {
+      setIsDeleting(false);
     }
-  }
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -89,8 +122,12 @@ export function EditContactDialog({
         <div className="p-6">
           <ContactForm
             initialData={contact}
+            companies={companies}
+            user={user}
+            contactsService={contactsService}
             onSubmit={handleSubmit}
-            submitLabel="Save Changes"
+            onSuccess={() => onOpenChange(false)}
+            submitLabel="Save changes"
             showContactType={false}
             onDelete={handleDelete}
           />

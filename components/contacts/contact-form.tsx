@@ -1,6 +1,6 @@
 "use client"
 
-import React from "react"
+import React, { useEffect } from "react"
 import { useForm } from "react-hook-form"
 import * as z from "zod"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -26,46 +26,60 @@ export const formSchema = z.object({
   type: z.enum(["individual", "business"]),
   firstName: z.string().optional(),
   lastName: z.string().optional(),
-  email: z.string().email().optional(),
+  email: z.string().email(),
   phone: z.string().optional(),
-  jobTitle: z.string().optional(),
-  businessName: z.string().optional(),
+  notes: z.string().optional(),
+  tags: z.array(z.string()).optional(),
   website: z.string()
     .refine(
       (value) => !value || value.startsWith('https://'),
       { message: 'Website must start with https://' }
     )
     .optional(),
-  companyId: z.string().optional(),
-  company: z.string().optional(),
-  businessWebsite: z.string().optional(),
-  industry: z.string().optional(),
-  [TERMINOLOGY.GROUP]: z.string().optional(),
-  segments: z.string().optional(),
-  tags: z.array(z.string()).optional(),
-  notes: z.string().optional(),
+  category: z.string().optional(),
+  address: z.object({
+    street: z.string().optional(),
+    city: z.string().optional(),
+    state: z.string().optional(),
+    zipCode: z.string().optional(),
+    country: z.string().optional(),
+  }).optional(),
   socialMedia: z.object({
     linkedin: z.string().optional(),
     twitter: z.string().optional(),
     facebook: z.string().optional(),
     instagram: z.string().optional(),
   }).optional(),
-  address: z.object({
-    [FIELDS.ADDRESS_STREET]: z.string().optional(),
-    [FIELDS.ADDRESS_APT]: z.string().optional(),
-    [FIELDS.ADDRESS_TOWN]: z.string().optional(),
-    [FIELDS.ADDRESS_STATE]: z.string().optional(),
-    [FIELDS.ADDRESS_ZIP]: z.string().optional(),
-    [FIELDS.ADDRESS_COUNTRY]: z.string().optional(),
-  }).optional(),
-}).refine((data) => {
+  company: z.string().optional(),
+  jobTitle: z.string().optional(),
+  department: z.string().optional(),
+  businessName: z.string().optional(),
+  industry: z.string().optional(),
+}).superRefine((data, ctx) => {
   if (data.type === "individual") {
-    return data.firstName && data.lastName;
+    if (!data.firstName) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "First name is required for individual contacts",
+        path: ["firstName"]
+      });
+    }
+    if (!data.lastName) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Last name is required for individual contacts",
+        path: ["lastName"]
+      });
+    }
+  } else if (data.type === "business") {
+    if (!data.businessName) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Business name is required for business contacts",
+        path: ["businessName"]
+      });
+    }
   }
-  return data.businessName;
-}, {
-  message: "Please fill in all required fields",
-  path: ["type"],
 });
 
 interface ContactFormProps {
@@ -74,6 +88,10 @@ interface ContactFormProps {
   submitLabel: string;
   showContactType?: boolean;
   onDelete?: () => Promise<void>;
+  companies: any[];
+  user: any;
+  contactsService: any;
+  onSuccess?: () => void;
 }
 
 export function ContactForm({ 
@@ -81,7 +99,11 @@ export function ContactForm({
   onSubmit, 
   submitLabel, 
   showContactType = true,
-  onDelete 
+  onDelete,
+  companies,
+  user,
+  contactsService,
+  onSuccess
 }: ContactFormProps) {
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -95,8 +117,7 @@ export function ContactForm({
       industry: "",
       businessName: "",
       website: "",
-      [TERMINOLOGY.GROUP]: "",
-      segments: "",
+      category: "",
       notes: "",
       tags: [],
       socialMedia: {
@@ -106,25 +127,65 @@ export function ContactForm({
         instagram: "",
       },
       address: {
-        [FIELDS.ADDRESS_STREET]: "",
-        [FIELDS.ADDRESS_APT]: "",
-        [FIELDS.ADDRESS_TOWN]: "",
-        [FIELDS.ADDRESS_STATE]: "",
-        [FIELDS.ADDRESS_ZIP]: "",
-        [FIELDS.ADDRESS_COUNTRY]: "United States",
+        street: "",
+        city: "",
+        state: "",
+        zipCode: "",
+        country: "United States",
       },
       company: "",
-      companyId: "",
-      businessWebsite: "",
+      department: "",
     },
   })
 
   const contactType = form.watch("type")
-  const values = form.getValues()
+
+  useEffect(() => {
+    if (initialData) {
+      const formData = { ...initialData };
+      
+      // If it's an individual contact with a company, find the company name
+      if (initialData.type === 'individual' && initialData.company) {
+        const company = companies.find(c => c.id === initialData.company);
+        if (company?.name) {
+          formData.company = company.name;
+        }
+      }
+      
+      form.reset(formData);
+    }
+  }, [initialData, companies, form]);
+
+  const handleSubmit = async (data: z.infer<typeof formSchema>) => {
+    if (!user) return;
+    
+    try {
+      let formData: Partial<IndividualContact | BusinessContact> = { ...data };
+
+      // If it's an individual contact with a company, convert company name to ID
+      if (formData.type === 'individual' && formData.company) {
+        const company = companies.find(c => c.name === formData.company);
+        if (company?.id) {
+          if ('company' in formData) {
+            (formData as Partial<IndividualContact>).company = company.id;
+          }
+        }
+      }
+
+      if (initialData?.id) {
+        await contactsService.updateContact(initialData.id, formData, user.uid);
+      } else {
+        await contactsService.addContact(formData as Omit<Contact, 'id' | 'dateAdded' | 'createdAt' | 'updatedAt'>, user.uid);
+      }
+      onSuccess?.();
+    } catch (error) {
+      console.error('Error saving contact:', error);
+    }
+  };
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+      <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6">
         {showContactType && (
           <Tabs 
             defaultValue="individual" 
@@ -185,7 +246,7 @@ export function ContactForm({
           />
         )}
 
-        {values.type === "individual" && (
+        {form.watch('type') === "individual" && (
           <FormField
             control={form.control}
             name="company"
@@ -199,19 +260,16 @@ export function ContactForm({
                       // Update company-related fields
                       form.setValue("company", value);
                       if (company) {
-                        form.setValue("companyId", company.id);
-                        form.setValue("businessWebsite", company.website);
                         form.setValue("industry", company.industry);
                       } else {
-                        form.setValue("companyId", undefined);
-                        form.setValue("businessWebsite", undefined);
                         form.setValue("industry", undefined);
                       }
                     }}
                     onCreateNew={(value) => {
-                      // Handle creating new company
-                      form.setValue("company", value);
-                      form.setValue("companyId", undefined);
+                      // Switch to business contact type
+                      form.setValue("type", "business");
+                      form.setValue("businessName", value);
+                      form.setValue("company", "");
                     }}
                   />
                 </FormControl>
@@ -221,7 +279,7 @@ export function ContactForm({
           />
         )}
 
-        {(values.type === "business" || (values.type === "individual" && values.company)) && (
+        {(form.watch('type') === "business" || (form.watch('type') === "individual" && form.watch('company'))) && (
           <FormField
             control={form.control}
             name="industry"
@@ -229,7 +287,7 @@ export function ContactForm({
               <FormItem>
                 <FormLabel>Industry</FormLabel>
                 <FormControl>
-                  <Input {...field} disabled={values.type === "individual"} />
+                  <Input {...field} disabled={form.watch('type') === "individual"} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -237,15 +295,15 @@ export function ContactForm({
           />
         )}
 
-        {(values.type === "business" || (values.type === "individual" && values.company)) && (
+        {(form.watch('type') === "business" || (form.watch('type') === "individual" && form.watch('company'))) && (
           <FormField
             control={form.control}
-            name={values.type === "business" ? "website" : "businessWebsite"}
+            name="website"
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Website</FormLabel>
                 <FormControl>
-                  <Input {...field} disabled={values.type === "individual"} />
+                  <Input {...field} disabled={form.watch('type') === "individual"} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -285,17 +343,17 @@ export function ContactForm({
         <div className="grid grid-cols-3 gap-4">
           <FormField
             control={form.control}
-            name={`address.${FIELDS.ADDRESS_COUNTRY}`}
+            name="address.country"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>{LABELS[FIELDS.ADDRESS_COUNTRY]}</FormLabel>
+                <FormLabel>Country</FormLabel>
                 <FormControl>
                   <CountryCombobox
                     value={field.value || ''}
                     onValueChange={(value) => {
                       field.onChange(value || '');
                       // Reset state when country changes
-                      form.setValue(`address.${FIELDS.ADDRESS_STATE}`, '');
+                      form.setValue("address.state", '');
                     }}
                   />
                 </FormControl>
@@ -305,10 +363,10 @@ export function ContactForm({
           />
           <FormField
             control={form.control}
-            name={TERMINOLOGY.GROUP}
+            name="category"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>{TERMINOLOGY.GROUP_LABEL}</FormLabel>
+                <FormLabel>Category</FormLabel>
                 <FormControl>
                   <Input {...field} value={field.value || ''} />
                 </FormControl>
@@ -344,10 +402,10 @@ export function ContactForm({
           <div className="grid grid-cols-2 gap-4">
             <FormField
               control={form.control}
-              name={`address.${FIELDS.ADDRESS_STREET}`}
+              name="address.street"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>{LABELS[FIELDS.ADDRESS_STREET]}</FormLabel>
+                  <FormLabel>Street</FormLabel>
                   <FormControl>
                     <Input {...field} value={field.value || ''} />
                   </FormControl>
@@ -357,10 +415,10 @@ export function ContactForm({
             />
             <FormField
               control={form.control}
-              name={`address.${FIELDS.ADDRESS_APT}`}
+              name="address.city"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>{LABELS[FIELDS.ADDRESS_APT]}</FormLabel>
+                  <FormLabel>City</FormLabel>
                   <FormControl>
                     <Input {...field} value={field.value || ''} />
                   </FormControl>
@@ -373,26 +431,13 @@ export function ContactForm({
           <div className="grid grid-cols-3 gap-4">
             <FormField
               control={form.control}
-              name={`address.${FIELDS.ADDRESS_TOWN}`}
+              name="address.state"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>{LABELS[FIELDS.ADDRESS_TOWN]}</FormLabel>
+                  <FormLabel>State</FormLabel>
                   <FormControl>
-                    <Input {...field} value={field.value || ''} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name={`address.${FIELDS.ADDRESS_STATE}`}
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{LABELS[FIELDS.ADDRESS_STATE]}</FormLabel>
-                  <FormControl>
-                    {form.watch(`address.${FIELDS.ADDRESS_COUNTRY}`)?.toLowerCase() === 'united states' || 
-                     form.watch(`address.${FIELDS.ADDRESS_COUNTRY}`)?.toLowerCase() === 'us' ? (
+                    {form.watch('address.country')?.toLowerCase() === 'united states' || 
+                     form.watch('address.country')?.toLowerCase() === 'us' ? (
                       <StateCombobox
                         value={field.value}
                         onValueChange={field.onChange}
@@ -407,10 +452,10 @@ export function ContactForm({
             />
             <FormField
               control={form.control}
-              name={`address.${FIELDS.ADDRESS_ZIP}`}
+              name="address.zipCode"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>{LABELS[FIELDS.ADDRESS_ZIP]}</FormLabel>
+                  <FormLabel>Zip Code</FormLabel>
                   <FormControl>
                     <Input {...field} value={field.value || ''} />
                   </FormControl>

@@ -5,31 +5,63 @@ import { Button } from "../../components/ui/button"
 import { Input } from "../../components/ui/input"
 import { ContactsTable } from "../../components/contacts/contacts-table"
 import { Settings, Search } from 'lucide-react'
-import type { Contact } from "../../lib/firebase/types"
+import type { Contact, BusinessContact } from "../../lib/firebase/types"
 import { AddContactDialog } from "../../components/contacts/add-contact-dialog"
 import { useAuth } from "../../contexts/auth-context"
 import { contactsService } from "../../lib/firebase/services"
 
+interface CompanyOption {
+  id: string;
+  name: string;
+  type: 'business';
+}
+
 export default function ContactsPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [contacts, setContacts] = useState<Contact[]>([])
+  const [companies, setCompanies] = useState<CompanyOption[]>([])
   const [loading, setLoading] = useState(true)
   const { user } = useAuth()
 
   useEffect(() => {
     if (!user?.uid) {
-      setLoading(false)
-      return
+      setLoading(false);
+      return;
     }
-    
-    // Set up real-time listener
+
+    // Set up real-time listener for contacts
     const unsubscribe = contactsService.subscribeToContacts((updatedContacts) => {
-      setContacts(updatedContacts)
-      setLoading(false)
-    }, user.uid)
+      // Ensure all contacts have required fields
+      const validContacts = updatedContacts.filter(contact => {
+        if (!contact || typeof contact !== 'object') return false;
+        if (!contact.id || !contact.type) return false;
+        if (contact.type === 'business' && !contact.businessName) return false;
+        if (contact.type === 'individual' && (!contact.firstName && !contact.lastName)) return false;
+        return true;
+      });
+
+      setContacts(validContacts);
+      
+      // Update companies list when contacts change
+      const businessContacts = validContacts.filter(
+        (contact): contact is BusinessContact => 
+          contact.type === 'business' && 
+          !!contact.id && 
+          !!contact.businessName
+      );
+      
+      const companiesList: CompanyOption[] = businessContacts.map(contact => ({
+        id: contact.id!,
+        name: contact.businessName,
+        type: 'business' as const
+      }));
+      
+      setCompanies(companiesList);
+      setLoading(false);
+    }, user.uid);
 
     // Cleanup subscription on unmount
-    return () => unsubscribe()
+    return () => unsubscribe();
   }, [user?.uid])
 
   if (loading) {
@@ -117,7 +149,13 @@ export default function ContactsPage() {
       </div>
 
       {/* Contacts Table */}
-      <ContactsTable data={filteredContacts} />
+      <ContactsTable 
+        contacts={filteredContacts} 
+        companies={companies}
+        onSelectionChange={(selected) => {
+          console.log('Selected contacts:', selected);
+        }}
+      />
     </div>
   )
 }

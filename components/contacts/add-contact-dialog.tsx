@@ -1,13 +1,13 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "../ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "../ui/dialog"
 import { X, Plus } from "lucide-react"
 import { useAuth } from "../../contexts/auth-context"
 import { contactsService } from "../../lib/firebase/services"
 import { toast } from "sonner"
-import { Contact } from "@/lib/firebase/types"
+import { Contact, BusinessContact } from "@/lib/firebase/types"
 import { ContactForm, formSchema } from "./contact-form"
 import { z } from "zod"
 
@@ -18,17 +18,37 @@ interface AddContactDialogProps {
 export function AddContactDialog({ activeTab = "all" }: AddContactDialogProps) {
   const [open, setOpen] = useState(false)
   const { user } = useAuth()
-  
-  const handleSubmit = async (values: z.infer<typeof formSchema>) => {
-    if (!user?.uid) return
-    
+  const [companies, setCompanies] = useState<BusinessContact[]>([])
+
+  useEffect(() => {
+    const fetchCompanies = async () => {
+      if (!user?.uid) return;
+      
+      try {
+        const businessContacts = await contactsService.getBusinessContacts(user.uid);
+        setCompanies(businessContacts);
+      } catch (error) {
+        console.error("Error fetching companies:", error);
+        toast.error("Failed to load companies");
+      }
+    };
+
+    fetchCompanies();
+  }, [user?.uid]);
+
+  const handleSubmit = async (data: z.infer<typeof formSchema>) => {
     try {
-      await contactsService.addContact(values as Omit<Contact, 'id' | 'dateAdded' | 'lastModified'>, user.uid)
-      setOpen(false)
-      toast.success("Contact created successfully")
+      if (!user) {
+        toast.error('You must be logged in to create contacts');
+        return;
+      }
+
+      await contactsService.addContact(data as Omit<Contact, 'id' | 'dateAdded' | 'lastModified'>, user.uid);
+      toast.success('Contact created successfully');
+      setOpen(false);
     } catch (error) {
-      console.error("Error creating contact:", error)
-      toast.error("Failed to create contact")
+      console.error('Error creating contact:', error);
+      toast.error('Failed to create contact');
     }
   }
 
@@ -61,6 +81,9 @@ export function AddContactDialog({ activeTab = "all" }: AddContactDialogProps) {
             onSubmit={handleSubmit}
             submitLabel="Create Contact"
             showContactType={true}
+            companies={companies}
+            user={user}
+            contactsService={contactsService}
           />
         </div>
       </DialogContent>

@@ -12,69 +12,51 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return isAuthenticated() && request.auth.uid in ['5JLJOrXRmUXhUILFGv2b4WuMqN43'];  
+      return isAuthenticated() && request.auth.token.admin == true;
     }
 
-    // Root collections
-    match /contacts/{docId} {
-      allow read: if isAuthenticated() && (
-        resource.data.userId == request.auth.uid || isAdmin()
+    function isValidTimestamp(timestamp) {
+      return timestamp is timestamp && 
+             timestamp.seconds is number && 
+             timestamp.nanos is number;
+    }
+
+    // Companies collection
+    match /companies/{companyId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated() && 
+                      (resource.data.createdBy == request.auth.uid || isAdmin());
+      allow delete: if isAuthenticated() && 
+                      (resource.data.createdBy == request.auth.uid || isAdmin());
+    }
+
+    // Contacts collection
+    match /contacts/{contactId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated() && (
+        resource.data.createdBy == request.auth.uid || 
+        isAdmin() ||
+        (resource.data.type == "business" && 
+         ('employeeCount' in request.resource.data) && 
+         request.resource.data.type == "business")
       );
-      allow create: if isAuthenticated() && (
-        request.resource.data.userId == request.auth.uid
-      );
-      allow update, delete: if isAuthenticated() && (
-        resource.data.userId == request.auth.uid || isAdmin()
-      );
+      allow delete: if isAuthenticated() && 
+                      (resource.data.createdBy == request.auth.uid || isAdmin());
     }
     
-    match /segments/{docId} {
-      allow read: if isAuthenticated() && (
-        resource.data.userId == request.auth.uid || isAdmin()
-      );
-      allow write: if false; // Prevent new writes to root collection
-    }
-
-    // User collections and nested documents
+    // User settings and preferences
     match /users/{userId} {
-      // Allow users to read and write their own data
-      allow read: if isOwner(userId) || isAdmin();
-      allow write: if isOwner(userId);
-      
-      // Allow users to access their own contacts
-      match /contacts/{contactId} {
-        allow read: if isOwner(userId) || isAdmin();
-        allow write: if isOwner(userId) || isAdmin();
-      }
-      
-      // Allow users to access their own segments
-      match /segments/{segmentId} {
-        allow read: if isOwner(userId) || isAdmin();
-        allow write: if isOwner(userId) || isAdmin();
-      }
-
-      // Allow users to access their own categories
-      match /categories/{categoryId} {
-        allow read: if isOwner(userId) || isAdmin();
-        allow write: if isOwner(userId) || isAdmin();
-      }
-      
-      // Allow users to access their own settings
       match /settings/{document=**} {
-        allow read: if isOwner(userId) || isAdmin();
-        allow write: if isOwner(userId) || isAdmin();
+        allow read: if isOwner(userId);
+        allow write: if isOwner(userId);
       }
-
-      // Allow users to access their contact-segment relationships
-      match /contactSegments/{document=**} {
-        allow read: if isOwner(userId) || isAdmin();
-        allow write: if isOwner(userId) || isAdmin();
+      
+      match /preferences/{document=**} {
+        allow read: if isOwner(userId);
+        allow write: if isOwner(userId);
       }
-    }
-    
-    // Deny access to all other documents
-    match /{document=**} {
-      allow read, write: if false;
     }
   }
 }

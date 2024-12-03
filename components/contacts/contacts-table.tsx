@@ -1,6 +1,7 @@
 "use client"
 
-import React, { useState } from "react"
+import { Timestamp } from "firebase/firestore"
+import React, { useState, useEffect } from "react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs"
 import { Button } from "../ui/button"
@@ -37,8 +38,10 @@ import {
   SelectGroup,
   SelectLabel
 } from "../ui/select"
-import { Timestamp } from 'firebase/firestore';
 import { FIELDS, LABELS, TABLE_COLUMNS, TERMINOLOGY } from "@/lib/constants";
+import { useAuth } from "@/contexts/auth-context";
+import { BulkEditMenu } from './bulk-edit-menu';
+import { User } from 'firebase/auth';
 
 // Type guard functions for Contact types
 function isIndividualContact(contact: Contact): contact is IndividualContact {
@@ -49,389 +52,116 @@ function isBusinessContact(contact: Contact): contact is BusinessContact {
   return contact.type === 'business';
 }
 
-interface ContactsTableProps {
-  data: Contact[]
+interface CompanyOption {
+  id: string;
+  name: string;
+  type: 'business';
+  industry?: string;
 }
 
-export function ContactsTable({ data }: ContactsTableProps) {
+interface ContactsTableProps {
+  contacts: Contact[];
+  companies: CompanyOption[];
+  onSelectionChange?: (selectedContacts: Contact[]) => void;
+}
+
+export function ContactsTable({ contacts, companies, onSelectionChange }: ContactsTableProps) {
   const [activeTab, setActiveTab] = useState("all")
-  const [selectedContacts, setSelectedContacts] = useState<string[]>([])
-  const [selectedField, setSelectedField] = useState<string>("")
-  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [editingContact, setEditingContact] = useState<Contact | null>(null)
-  const [sortConfig, setSortConfig] = useState<{
-    key: string;
-    direction: 'asc' | 'desc';
-  } | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [contactToDelete, setContactToDelete] = useState<Contact | null>(null)
+  const { user } = useAuth()
 
-  const filteredData = data.filter(contact => {
-    if (activeTab === "individual") return contact.type === "individual"
-    if (activeTab === "business") return contact.type === "business"
-    return true
-  })
-
-  const sortData = (data: Contact[]) => {
-    if (!sortConfig) return data;
-
-    return [...data].sort((a, b) => {
-      let aValue: any;
-      let bValue: any;
-
-      switch (sortConfig.key) {
-        case 'name':
-          aValue = a.type === 'individual' 
-            ? `${a.firstName} ${a.lastName}` 
-            : '';
-          bValue = b.type === 'individual'
-            ? `${b.firstName} ${b.lastName}`
-            : '';
-          break;
-        case 'company':
-          aValue = a.type === 'individual'
-            ? (a.company || '')
-            : (a.businessName || '');
-          bValue = b.type === 'individual'
-            ? (b.company || '')
-            : (b.businessName || '');
-          break;
-        case TERMINOLOGY.GROUP:
-          aValue = a[TERMINOLOGY.GROUP] || '';
-          bValue = b[TERMINOLOGY.GROUP] || '';
-          break;
-        case 'email':
-          aValue = a.email || '';
-          bValue = b.email || '';
-          break;
-        case 'town':
-          aValue = a.address?.city || '';
-          bValue = b.address?.city || '';
-          break;
-        case 'state':
-          aValue = a.address?.state || '';
-          bValue = b.address?.state || '';
-          break;
-        case 'dateAdded':
-          aValue = a.dateAdded ? a.dateAdded.toDate().getTime() : 0;
-          bValue = b.dateAdded ? b.dateAdded.toDate().getTime() : 0;
-          break;
-        default:
-          return 0;
-      }
-
-      if (aValue < bValue) {
-        return sortConfig.direction === 'asc' ? -1 : 1;
-      }
-      if (aValue > bValue) {
-        return sortConfig.direction === 'asc' ? 1 : -1;
-      }
-      return 0;
-    });
-  };
-
-  const handleSort = (key: string) => {
-    setSortConfig((currentConfig) => {
-      if (!currentConfig || currentConfig.key !== key) {
-        return { key, direction: 'asc' };
-      }
-      if (currentConfig.direction === 'asc') {
-        return { key, direction: 'desc' };
-      }
-      return null;
-    });
-  };
-
-  const SortableHeader = ({ column, label }: { column: string, label: string }) => {
-    const isActive = sortConfig?.key === column;
-    const direction = isActive ? sortConfig.direction : null;
-    
-    return (
-      <TableHead>
-        <Button
-          variant="ghost"
-          onClick={() => handleSort(column)}
-          className="h-8 flex items-center gap-1 font-semibold"
-        >
-          {label}
-          {direction === 'asc' ? (
-            <ArrowUp className="h-4 w-4" />
-          ) : direction === 'desc' ? (
-            <ArrowDown className="h-4 w-4" />
-          ) : (
-            <ArrowUpDown className="h-4 w-4" />
-          )}
-        </Button>
-      </TableHead>
-    );
-  };
-
-  const handleSelectAll = (checked: boolean) => {
-    if (checked) {
-      setSelectedContacts(filteredData.map(contact => contact.id))
-    } else {
-      setSelectedContacts([])
-    }
-  }
-
-  const handleSelectContact = (checked: boolean, contactId: string) => {
-    if (checked) {
-      setSelectedContacts([...selectedContacts, contactId])
-    } else {
-      setSelectedContacts(selectedContacts.filter(id => id !== contactId))
-    }
-  }
-
-  const handleMassEdit = () => {
-    if (selectedField && selectedContacts.length > 0) {
-      const dialog = document.createElement('dialog');
-      dialog.innerHTML = `
-        <div class="p-4">
-          <h2 class="text-lg font-semibold mb-4">Edit ${selectedField}</h2>
-          <div class="mb-4">
-            <input type="text" id="massEditValue" class="w-full p-2 border rounded" />
-          </div>
-          <div class="flex justify-end gap-2">
-            <button id="cancelMassEdit" class="px-4 py-2 border rounded">Cancel</button>
-            <button id="confirmMassEdit" class="px-4 py-2 bg-primary text-white rounded">Save</button>
-          </div>
-        </div>
-      `;
-
-      dialog.querySelector('#cancelMassEdit')?.addEventListener('click', () => {
-        dialog.close();
-        document.body.removeChild(dialog);
-      });
-
-      dialog.querySelector('#confirmMassEdit')?.addEventListener('click', async () => {
-        const value = (dialog.querySelector('#massEditValue') as HTMLInputElement)?.value;
-        if (value) {
-          try {
-            const updates: any = {};
-            if (selectedField.includes('.')) {
-              const [parent, child] = selectedField.split('.');
-              updates[parent] = { [child]: value };
-            } else {
-              updates[selectedField] = value;
-            }
-            
-            await contactsService.updateContacts(selectedContacts, updates);
-            toast.success(`Updated ${selectedField} for ${selectedContacts.length} contacts`);
-          } catch (error) {
-            console.error("Error updating contacts:", error);
-            toast.error("Failed to update contacts");
-          }
-        }
-        dialog.close();
-        document.body.removeChild(dialog);
-      });
-
-      document.body.appendChild(dialog);
-      dialog.showModal();
-    }
-  };
+  const individualCount = contacts.filter(contact => contact.type === 'individual').length
+  const businessCount = contacts.filter(contact => contact.type === 'business').length
+  const totalCount = contacts.length
 
   const handleDelete = async () => {
-    if (!selectedContacts.length) return;
+    if (!contactToDelete || !user) return;
     
     try {
-      await contactsService.deleteContacts(selectedContacts);
-      setShowDeleteDialog(false);
-      setSelectedContacts([]);
+      await contactsService.deleteContact(contactToDelete.id!, user.uid);
+      setContactToDelete(null);
+      setDeleteDialogOpen(false);
     } catch (error) {
-      console.error("Error deleting contacts:", error);
-      // TODO: Add error handling UI
+      console.error('Error deleting contact:', error);
     }
-  }
-
-  const formatFirestoreTimestamp = (timestamp?: Timestamp | null) => {
-    if (!timestamp) return '-';
-    return timestamp instanceof Timestamp 
-      ? timestamp.toDate().toLocaleDateString() 
-      : String(timestamp);
-  };
-
-  const TagList = ({ tags }: { tags?: string[] }) => {
-    if (!tags || tags.length === 0) return <span>-</span>;
-    
-    return (
-      <div className="flex flex-wrap gap-1">
-        {tags.map((tag, index) => (
-          <span 
-            key={index} 
-            className="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-black dark:text-white"
-          >
-            {tag}
-          </span>
-        ))}
-      </div>
-    );
   };
 
   return (
-    <div className="space-y-4">
-      <Tabs defaultValue={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="inline-flex h-10 items-center justify-center rounded-lg bg-muted p-1 text-muted-foreground">
-          <TabsTrigger value="all" className="data-[state=active]:bg-primary/10">
-            All Contacts
-            <span className={cn(
-              "ml-2 text-xs rounded-full px-2 py-0.5",
-              "bg-muted-foreground/20",
-              "data-[state=active]:bg-primary/20"
-            )}>
-              {data.length}
-            </span>
-          </TabsTrigger>
-          <TabsTrigger value="individual" className="data-[state=active]:bg-primary/10">
-            Individuals
-            <span className={cn(
-              "ml-2 text-xs rounded-full px-2 py-0.5",
-              "bg-muted-foreground/20",
-              "data-[state=active]:bg-primary/20"
-            )}>
-              {data.filter(c => c.type === "individual").length}
-            </span>
-          </TabsTrigger>
-          <TabsTrigger value="business" className="data-[state=active]:bg-primary/10">
-            Businesses
-            <span className={cn(
-              "ml-2 text-xs rounded-full px-2 py-0.5",
-              "bg-muted-foreground/20",
-              "data-[state=active]:bg-primary/20"
-            )}>
-              {data.filter(c => c.type === "business").length}
-            </span>
-          </TabsTrigger>
-        </TabsList>
+    <div className="w-full">
+      <Tabs defaultValue="all" className="w-full" onValueChange={setActiveTab}>
+        <div className="flex justify-between items-center mb-4">
+          <TabsList>
+            <TabsTrigger value="all">All Contacts ({totalCount})</TabsTrigger>
+            <TabsTrigger value="individual">Individuals ({individualCount})</TabsTrigger>
+            <TabsTrigger value="business">Companies ({businessCount})</TabsTrigger>
+          </TabsList>
+        </div>
 
-        <TabsContent value={activeTab} className="mt-4">
-          <div className="rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-12">
-                    <Checkbox 
-                      checked={selectedContacts.length === filteredData.length}
-                      onCheckedChange={handleSelectAll}
-                    />
-                  </TableHead>
-                  {activeTab === "individual" ? (
-                    <SortableHeader column="name" label="Name" />
-                  ) : activeTab === "business" ? (
-                    <SortableHeader column="name" label="Name" />
-                  ) : (
-                    <SortableHeader column="name" label="Name" />
-                  )}
-                  <SortableHeader column="company" label="Company" />
-                  <SortableHeader column="email" label="Email" />
-                  <TableHead>Phone</TableHead>
-                  <TableHead>Social</TableHead>
-                  <TableHead>Tags</TableHead>
-                  <SortableHeader column={TERMINOLOGY.GROUP} label={TERMINOLOGY.GROUP_LABEL} />
-                  <SortableHeader column="town" label={LABELS[FIELDS.ADDRESS_TOWN]} />
-                  <SortableHeader column="state" label={LABELS[FIELDS.ADDRESS_STATE]} />
-                  <SortableHeader column="dateAdded" label="Date Added" />
-                  <TableHead>Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {sortData(filteredData).map((contact) => (
-                  <TableRow key={contact.id}>
-                    <TableCell>
-                      <Checkbox 
-                        checked={selectedContacts.includes(contact.id)}
-                        onCheckedChange={(checked) => handleSelectContact(checked as boolean, contact.id)}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      {contact.type === 'individual' 
-                        ? `${contact.firstName} ${contact.lastName}`
-                        : '-'}
-                    </TableCell>
-                    <TableCell>
-                      {contact.type === 'individual' 
-                        ? (contact.company || '-') 
-                        : (contact.businessName || '-')}
-                    </TableCell>
-                    <TableCell>{contact.email || '-'}</TableCell>
-                    <TableCell>{contact.phone || '-'}</TableCell>
-                    <TableCell>
-                      <div className="flex space-x-2">
-                        {contact.socialMedia?.linkedin && <SocialIcon platform="linkedin" url={contact.socialMedia.linkedin} />}
-                        {contact.socialMedia?.twitter && <SocialIcon platform="twitter" url={contact.socialMedia.twitter} />}
-                        {contact.socialMedia?.facebook && <SocialIcon platform="facebook" url={contact.socialMedia.facebook} />}
-                        {contact.socialMedia?.instagram && <SocialIcon platform="instagram" url={contact.socialMedia.instagram} />}
-                        {contact.website && <SocialIcon platform="website" url={contact.website} />}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <TagList tags={contact.tags || []} />
-                    </TableCell>
-                    <TableCell>{contact[TERMINOLOGY.GROUP] || '-'}</TableCell>
-                    <TableCell>{contact.address?.city || '-'}</TableCell>
-                    <TableCell>{contact.address?.state || '-'}</TableCell>
-                    <TableCell>{contact.dateAdded ? contact.dateAdded.toDate().toLocaleDateString() : '-'}</TableCell>
-                    <TableCell>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => setEditingContact(contact)}
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
+        <TabsContent value="all" className="m-0">
+          <ContactsList 
+            data={contacts} 
+            companies={companies}
+            activeTab={activeTab} 
+          />
+        </TabsContent>
+
+        <TabsContent value="individual" className="m-0">
+          <ContactsList 
+            data={contacts.filter(contact => contact.type === 'individual')} 
+            companies={companies}
+            activeTab={activeTab} 
+          />
+        </TabsContent>
+
+        <TabsContent value="business" className="m-0">
+          <ContactsList 
+            data={contacts.filter(contact => contact.type === 'business')} 
+            companies={companies}
+            activeTab={activeTab} 
+          />
         </TabsContent>
       </Tabs>
 
-      {selectedContacts.length > 0 && (
-        <div className="fixed bottom-8 right-8 flex items-center gap-2 bg-background p-4 rounded-lg shadow-lg border z-[60]">
-          <span className="text-sm font-medium">{selectedContacts.length} selected</span>
-          <Select
-            value={selectedField}
-            onValueChange={setSelectedField}
-          >
-            <SelectTrigger className="w-[200px]">
-              <SelectValue placeholder="Select field to edit" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectGroup>
-                <SelectItem value="tags">Tags</SelectItem>
-                <SelectItem value={TERMINOLOGY.GROUP}>{TERMINOLOGY.GROUP_LABEL}</SelectItem>
-                <SelectItem value={`address.${FIELDS.ADDRESS_TOWN}`}>{LABELS[FIELDS.ADDRESS_TOWN]}</SelectItem>
-                <SelectItem value={`address.${FIELDS.ADDRESS_STATE}`}>{LABELS[FIELDS.ADDRESS_STATE]}</SelectItem>
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-          <Button 
-            variant="default" 
-            onClick={handleMassEdit}
-            disabled={!selectedField}
-          >
-            Edit Selected
-          </Button>
-          <Button 
-            variant="destructive"
-            onClick={() => setShowDeleteDialog(true)}
-          >
-            Delete Selected
-          </Button>
-        </div>
+      {editingContact && (
+        <EditContactDialog
+          open={!!editingContact}
+          onOpenChange={(open) => !open && setEditingContact(null)}
+          contact={editingContact}
+          companies={companies.map(company => ({
+            id: company.id,
+            type: 'business' as const,
+            businessName: company.name,
+            industry: company.industry || '',
+            createdAt: Timestamp.now(),
+            updatedAt: Timestamp.now(),
+            userId: user?.uid || '',
+            email: '', // Add a default empty email
+            dateAdded: new Date(), // Add current date
+            createdBy: user?.uid || '' // Add current user's ID
+          }))}
+          onContactUpdated={() => {
+            // Refresh contacts after update
+            if (user) {
+              contactsService.getContacts(user.uid).then(updatedContacts => {
+                // Update contacts state
+              });
+            }
+          }}
+        />
       )}
 
-      {/* Delete Confirmation Dialog */}
-      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Delete Contacts</DialogTitle>
+            <DialogTitle>Delete Contact</DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete {selectedContacts.length} contacts? This action cannot be undone.
+              Are you sure you want to delete this contact? This action cannot be undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowDeleteDialog(false)}>
+            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>
               Cancel
             </Button>
             <Button variant="destructive" onClick={handleDelete}>
@@ -440,35 +170,95 @@ export function ContactsTable({ data }: ContactsTableProps) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* Add EditContactDialog */}
-      {editingContact && (
-        <EditContactDialog
-          open={!!editingContact}
-          onOpenChange={(open) => {
-            if (!open) setEditingContact(null);
-          }}
-          contact={editingContact}
-          onContactUpdated={() => {}}
-        />
-      )}
     </div>
   )
 }
 
-function ContactsList({ data, activeTab }: { data: Contact[], activeTab: string }) {
+interface ContactsListProps {
+  data: Contact[];
+  companies: CompanyOption[];
+  activeTab: string;
+}
+
+const ContactsList = ({ data, companies, activeTab }: ContactsListProps) => {
+  const [selectedContacts, setSelectedContacts] = useState<string[]>([]);
+  const [editingContact, setEditingContact] = useState<Contact | null>(null);
+  const { user } = useAuth();
+  
+  // Transform companies into BusinessContact format
+  const businessContacts = companies.map(company => ({
+    id: company.id,
+    type: 'business' as const,
+    businessName: company.name,
+    industry: company.industry || '',
+    createdAt: Timestamp.now(),
+    updatedAt: Timestamp.now(),
+    userId: user?.uid || '',
+    email: '', // Add a default empty email
+    dateAdded: new Date(), // Add current date
+    createdBy: user?.uid || '' // Add current user's ID
+  }));
+
+  const [bulkEditOpen, setBulkEditOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+
+  const handleDelete = async () => {
+    if (!user) {
+      console.error('User not authenticated');
+      return;
+    }
+
+    try {
+      await Promise.all(
+        selectedContacts.map(contactId => 
+          contactsService.deleteContact(contactId, user.uid)
+        )
+      );
+      setSelectedContacts([]);
+      setDeleteDialogOpen(false);
+    } catch (error) {
+      console.error('Error deleting contacts:', error);
+    }
+  };
+
+  const handleBulkEdit = () => {
+    if (!user) {
+      console.error('User not authenticated');
+      return;
+    }
+    setBulkEditOpen(true);
+  };
+
+  const handleSelectAll = (checked: boolean) => {
+    setSelectedContacts(checked ? data.filter(contact => contact.id !== undefined).map(contact => contact.id!) : []);
+  };
+
+  const handleSelectContact = (contactId: string, checked: boolean) => {
+    setSelectedContacts(prev => 
+      checked 
+        ? [...prev, contactId]
+        : prev.filter(id => id !== contactId)
+    );
+  };
+
+  const handleBulkEditComplete = () => {
+    setSelectedContacts([]);
+  };
+
   return (
-    <div className="rounded-md border">
+    <div className="rounded-md border relative">
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead className="w-12"><Checkbox /></TableHead>
-            <TableHead>
-              {activeTab === 'business' ? TABLE_COLUMNS.BUSINESS.COMPANY : TABLE_COLUMNS.INDIVIDUAL.NAME}
+            <TableHead className="w-12">
+              <Checkbox 
+                checked={selectedContacts.length === data.length}
+                onCheckedChange={(checked) => handleSelectAll(!!checked)}
+              />
             </TableHead>
-            <TableHead>
-              {activeTab === 'business' ? TABLE_COLUMNS.BUSINESS.INDUSTRY : TABLE_COLUMNS.INDIVIDUAL.COMPANY}
-            </TableHead>
+            <TableHead>Name</TableHead>
+            <TableHead>Company</TableHead>
+            <TableHead>Industry</TableHead>
             <TableHead>Email</TableHead>
             <TableHead>Phone</TableHead>
             <TableHead>Social</TableHead>
@@ -481,32 +271,69 @@ function ContactsList({ data, activeTab }: { data: Contact[], activeTab: string 
           </TableRow>
         </TableHeader>
         <TableBody>
-          {data.map((contact) => (
-            <TableRow key={contact.id}>
-              <TableCell><Checkbox /></TableCell>
+          {data
+            .filter(contact => contact && typeof contact === 'object' && contact.id !== undefined)
+            .map((contact) => (
+            <TableRow key={contact.id!} className="group">
               <TableCell>
-                {contact.type === 'individual' 
-                  ? `${contact.firstName} ${contact.lastName}`
-                  : contact.businessName}
+                <Checkbox 
+                  checked={selectedContacts.includes(contact.id!)}
+                  onCheckedChange={(checked) => handleSelectContact(contact.id!, !!checked)}
+                />
               </TableCell>
               <TableCell>
-                {contact.type === 'individual' 
-                  ? (contact.company || '-') 
-                  : (contact.type === 'business' ? (contact.industry || '-') : '-')}
+                {contact.type === 'individual' && isIndividualContact(contact)
+                  ? `${contact.firstName || ''} ${contact.lastName || ''}`.trim() || '-'
+                  : contact.type === 'business' && isBusinessContact(contact)
+                  ? contact.businessName || '-'
+                  : '-'}
               </TableCell>
+              <TableCell>
+                {contact.type === 'individual' ? (
+                  companies.find(c => c.id === contact.company)?.name || contact.company || '-'
+                ) : (
+                  contact.businessName || '-'
+                )}
+              </TableCell>
+              <TableCell>{contact.type === 'business' ? contact.industry || '-' : '-'}</TableCell>
               <TableCell>{contact.email || '-'}</TableCell>
               <TableCell>{contact.phone || '-'}</TableCell>
-              <TableCell>-</TableCell>
-              <TableCell>{Array.isArray(contact.tags) ? contact.tags.join(', ') : (contact.tags || '-')}</TableCell>
-              <TableCell>{contact[TERMINOLOGY.GROUP] || '-'}</TableCell>
+              <TableCell>
+                <div className="flex gap-2">
+                  {contact.socialMedia?.linkedin && (
+                    <SocialIcon platform="linkedin" url={contact.socialMedia.linkedin} />
+                  )}
+                  {contact.socialMedia?.twitter && (
+                    <SocialIcon platform="twitter" url={contact.socialMedia.twitter} />
+                  )}
+                  {contact.socialMedia?.facebook && (
+                    <SocialIcon platform="facebook" url={contact.socialMedia.facebook} />
+                  )}
+                  {contact.socialMedia?.instagram && (
+                    <SocialIcon platform="instagram" url={contact.socialMedia.instagram} />
+                  )}
+                  {contact.website && (
+                    <SocialIcon platform="website" url={contact.website} />
+                  )}
+                </div>
+              </TableCell>
+              <TableCell>{Array.isArray(contact.tags) ? contact.tags.join(', ') : '-'}</TableCell>
+              <TableCell>{typeof contact[TERMINOLOGY.GROUP] === 'string' ? contact[TERMINOLOGY.GROUP] : '-'}</TableCell>
               <TableCell>{contact.address?.city || '-'}</TableCell>
               <TableCell>{contact.address?.state || '-'}</TableCell>
-              <TableCell>{contact.dateAdded ? contact.dateAdded.toDate().toLocaleDateString() : '-'}</TableCell>
+              <TableCell>
+                {contact.dateAdded instanceof Timestamp 
+                  ? contact.dateAdded.toDate().toLocaleDateString() 
+                  : typeof contact.dateAdded === 'string'
+                  ? new Date(contact.dateAdded).toLocaleDateString()
+                  : '-'}
+              </TableCell>
               <TableCell>
                 <Button
                   variant="ghost"
                   size="icon"
                   className="opacity-0 group-hover:opacity-100"
+                  onClick={() => setEditingContact(contact)}
                 >
                   <Pencil className="h-4 w-4" />
                 </Button>
@@ -515,48 +342,59 @@ function ContactsList({ data, activeTab }: { data: Contact[], activeTab: string 
           ))}
         </TableBody>
       </Table>
+      
+      {selectedContacts.length > 0 && (
+        <BulkEditMenu
+          selectedContacts={selectedContacts}
+          activeTab={activeTab}
+          onClose={() => setSelectedContacts([])}
+          companies={businessContacts}
+          onUpdate={handleBulkEditComplete}
+        />
+      )}
+
+      {editingContact && (
+        <EditContactDialog
+          key={editingContact.id}
+          contact={editingContact}
+          open={!!editingContact}
+          onOpenChange={(open) => !open && setEditingContact(null)}
+          companies={businessContacts}
+          onContactUpdated={() => {
+            // Refresh the contacts list or update the specific contact
+            setEditingContact(null);
+          }}
+        />
+      )}
     </div>
-  )
-}
+  );
+};
 
 const SocialIcon = ({ platform, url }: { platform: string; url: string }) => {
   if (!url) return null;
-  
-  const icons = {
-    linkedin: <Linkedin className="h-4 w-4" />,
-    twitter: <Twitter className="h-4 w-4" />,
-    instagram: <Instagram className="h-4 w-4" />,
-    facebook: <Facebook className="h-4 w-4" />,
-    website: <Globe className="h-4 w-4" />
+
+  const handleClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    window.open(url, '_blank');
   };
 
-  const getFullUrl = (platform: string, handle: string) => {
-    const baseUrls: { [key: string]: string } = {
-      linkedin: 'https://linkedin.com/in/',
-      twitter: 'https://twitter.com/',
-      facebook: 'https://facebook.com/',
-      instagram: 'https://instagram.com/',
-      website: '' // For website, use the URL as is
-    };
-
-    // If it's a website, return the URL as is
-    if (platform === 'website') return handle;
-
-    // For social media platforms, combine base URL with handle
-    const baseUrl = baseUrls[platform];
-    // Remove @ if present at the start of the handle
-    const cleanHandle = handle.startsWith('@') ? handle.substring(1) : handle;
-    return baseUrl + cleanHandle;
+  const iconProps = {
+    className: "h-4 w-4 text-muted-foreground hover:text-foreground cursor-pointer",
+    onClick: handleClick
   };
 
-  return (
-    <a
-      href={getFullUrl(platform, url)}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="text-muted-foreground hover:text-primary"
-    >
-      {icons[platform as keyof typeof icons]}
-    </a>
-  );
+  switch (platform.toLowerCase()) {
+    case 'linkedin':
+      return <Linkedin {...iconProps} />;
+    case 'twitter':
+      return <Twitter {...iconProps} />;
+    case 'facebook':
+      return <Facebook {...iconProps} />;
+    case 'instagram':
+      return <Instagram {...iconProps} />;
+    case 'website':
+      return <Globe {...iconProps} />;
+    default:
+      return null;
+  }
 };

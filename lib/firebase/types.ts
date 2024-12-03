@@ -1,24 +1,54 @@
 import { Timestamp } from 'firebase/firestore';
-import { TERMINOLOGY, FIELDS } from '../constants';
 
 /**
- * Base contact interface containing common fields for both individual and business contacts
+ * Base model interface containing common fields for all models
  */
-export interface BaseContact {
-  id: string;
-  userId: string;
-  type: 'individual' | 'business';
+export interface BaseModel {
+  id?: string;
+  createdAt: Date;
+  updatedAt: Date;
+  createdBy: string;
+}
+
+/**
+ * Company interface extending the base model interface
+ */
+export interface Company extends BaseModel {
+  name: string;
+  industry?: string;
   email?: string;
   phone?: string;
-  website?: string;
-  category?: string;
-  tags?: string[];
-  notes?: string;
-  dateAdded: Timestamp;
-  lastModified: Timestamp;
   address?: {
     street?: string;
-    apt?: string;
+    city?: string;
+    state?: string;
+    zip?: string;
+    country?: string;
+  };
+  website?: string;
+  notes?: string;
+}
+
+/**
+ * Type representing the type of contact
+ */
+export type ContactType = 'individual' | 'business';
+
+/**
+ * Base contact interface extending the base model interface
+ */
+export interface BaseContact extends BaseModel {
+  type: ContactType;
+  email: string;
+  phone?: string;
+  notes?: string;
+  tags?: string[];
+  website?: string;
+  category?: string;
+  group?: string;
+  userId: string;
+  address?: {
+    street?: string;
     city?: string;
     state?: string;
     zipCode?: string;
@@ -27,10 +57,10 @@ export interface BaseContact {
   socialMedia?: {
     linkedin?: string;
     twitter?: string;
-    instagram?: string;
     facebook?: string;
+    instagram?: string;
   };
-  group?: string;
+  dateAdded: Date;
 }
 
 /**
@@ -40,11 +70,9 @@ export interface IndividualContact extends BaseContact {
   type: 'individual';
   firstName: string;
   lastName: string;
+  company?: string;
   jobTitle?: string;
-  companyId?: string;  // Reference to the business contact
-  company?: string;    // Denormalized company name for quick access
-  businessWebsite?: string;  // Denormalized from business contact
-  industry?: string;   // Denormalized from business contact
+  department?: string;
 }
 
 /**
@@ -54,61 +82,27 @@ export interface BusinessContact extends BaseContact {
   type: 'business';
   businessName: string;
   industry?: string;
-  employeeCount?: number;  // Count of linked individual contacts
+  website?: string;
 }
 
 /**
- * Union type representing either an individual or business contact
+ * Type representing a contact
  */
 export type Contact = IndividualContact | BusinessContact;
 
 /**
- * Group interface representing a collection of contacts
+ * User settings interface extending the base model interface
  */
-export interface Group {
-  id: string;
-  userId: string;
-  name: string;
-  description?: string;
-  dateCreated: Timestamp;
-  lastModified: Timestamp;
-}
-
-/**
- * Segment interface representing a set of rules to filter contacts
- */
-export interface Segment {
-  id: string;
-  userId: string;
-  name: string;
-  description?: string;
-  rules?: {
-    field: string;
-    operator: string;
-    value: any;
-  }[];
-  dateCreated: Timestamp;
-  lastModified: Timestamp;
-}
-
-/**
- * Contact segment interface representing the association between a contact and a segment
- */
-export interface ContactSegment {
-  contactId: string;
-  segmentId: string;
-  dateAdded: Timestamp;
-}
-
-/**
- * User settings interface representing the user's preferences
- */
-export interface UserSettings {
-  userId: string;
-  defaultView: 'all' | 'individual' | 'business';
+export interface UserSettings extends BaseModel {
   theme?: 'light' | 'dark' | 'system';
-  notifications?: {
-    email: boolean;
-    push: boolean;
-  };
+  contactsTableColumns?: string[];
+  defaultContactType?: ContactType;
+}
+
+/**
+ * User preferences interface extending the base model interface
+ */
+export interface UserPreferences extends BaseModel {
+  emailNotifications?: boolean;
+  dashboardLayout?: string;
 }

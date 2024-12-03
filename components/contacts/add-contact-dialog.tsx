@@ -21,11 +21,14 @@ import {
   FormField,
   FormItem,
   FormLabel,
+  FormMessage,
 } from "../ui/form"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs"
 import { cn } from "../../lib/utils"
 import { useAuth } from "../../contexts/auth-context"
 import { contactsService } from "../../lib/firebase/services"
+import { toast } from "sonner"
+import { StateCombobox } from "../ui/state-combobox"
 
 const formSchema = z.object({
   type: z.enum(["individual", "business"]),
@@ -35,7 +38,12 @@ const formSchema = z.object({
   phone: z.string().optional(),
   jobTitle: z.string().optional(),
   company: z.string().optional(),
-  website: z.string().optional(),
+  website: z.string()
+    .refine(
+      (value) => !value || value.startsWith('https://'),
+      { message: 'Website must start with https://' }
+    )
+    .optional(),
   category: z.string().optional(),
   segments: z.string().optional(),
   tags: z.array(z.string()).optional(),
@@ -104,40 +112,48 @@ export function AddContactDialog({ activeTab = "all" }: AddContactDialogProps) {
       const cleanedValues = {
         type: values.type,
         userId: user.uid,
-        firstName: values.type === 'individual' ? values.firstName || undefined : undefined,
-        lastName: values.type === 'individual' ? values.lastName || undefined : undefined,
-        businessName: values.type === 'business' ? values.company || undefined : undefined,
-        email: values.email || undefined,
-        phone: values.phone || undefined,
-        jobTitle: values.type === 'individual' ? values.jobTitle || undefined : undefined,
-        company: values.type === 'individual' ? values.company || undefined : undefined,
-        website: values.website || undefined,
-        category: values.category || undefined,
-        segments: values.segments || undefined,
+        // For individual contacts
+        ...(values.type === 'individual' ? {
+          firstName: values.firstName || null,
+          lastName: values.lastName || null,
+          jobTitle: values.jobTitle || null,
+          company: values.company || null,
+        } : {}),
+        // For business contacts
+        ...(values.type === 'business' ? {
+          businessName: values.company || null,
+        } : {}),
+        // Common fields
+        email: values.email || null,
+        phone: values.phone || null,
+        website: values.website || null,
+        category: values.category || null,
+        segments: values.segments || null,
         tags: values.tags || [],
-        notes: values.notes || undefined,
+        notes: values.notes || null,
         socialMedia: {
-          linkedin: values.socialMedia?.linkedin || undefined,
-          twitter: values.socialMedia?.twitter || undefined,
-          facebook: values.socialMedia?.facebook || undefined,
-          instagram: values.socialMedia?.instagram || undefined,
+          linkedin: values.socialMedia?.linkedin || null,
+          twitter: values.socialMedia?.twitter || null,
+          facebook: values.socialMedia?.facebook || null,
+          instagram: values.socialMedia?.instagram || null,
         },
         address: {
-          street: values.address?.street || undefined,
-          apt: values.address?.apt || undefined,
-          city: values.address?.city || undefined,
-          state: values.address?.state || undefined,
-          zipCode: values.address?.zipCode || undefined,
-          country: values.address?.country || undefined,
+          street: values.address?.street || null,
+          apt: values.address?.apt || null,
+          city: values.address?.city || null,
+          state: values.address?.state || null,
+          zipCode: values.address?.zipCode || null,
+          country: values.address?.country || null,
         }
-      }
+      };
 
-      await contactsService.addContact(cleanedValues, user.uid)
-      setOpen(false)
-      form.reset()
+      await contactsService.addContact(cleanedValues, user.uid);
+      setOpen(false);
+      form.reset();
+      toast.success("Contact created successfully");
     } catch (error) {
-      console.error("Error creating contact:", error)
-      // TODO: Add error handling UI
+      console.error("Error creating contact:", error);
+      toast.error("Failed to create contact");
     }
   }
 
@@ -169,8 +185,8 @@ export function AddContactDialog({ activeTab = "all" }: AddContactDialogProps) {
           Add Contact
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
-        <DialogHeader className="relative">
+      <DialogContent className="max-h-[80vh] max-w-2xl overflow-y-auto">
+        <DialogHeader className="relative sticky top-0 bg-background z-50 pb-4 mb-4 border-b">
           <Button
             variant="ghost"
             size="icon"
@@ -182,7 +198,7 @@ export function AddContactDialog({ activeTab = "all" }: AddContactDialogProps) {
           <DialogTitle>Add New Contact</DialogTitle>
         </DialogHeader>
         <Tabs value={contactType} onValueChange={handleTabChange as (value: string) => void}>
-          <TabsList className="grid w-full grid-cols-2">
+          <TabsList className="grid w-full grid-cols-2 sticky top-0 bg-background">
             <TabsTrigger value="individual">Individual</TabsTrigger>
             <TabsTrigger value="business">Business</TabsTrigger>
           </TabsList>
@@ -223,7 +239,7 @@ export function AddContactDialog({ activeTab = "all" }: AddContactDialogProps) {
                       <FormItem>
                         <FormLabel>Email</FormLabel>
                         <FormControl>
-                          <Input type="email" {...field} />
+                          <Input {...field} />
                         </FormControl>
                       </FormItem>
                     )}
@@ -235,7 +251,7 @@ export function AddContactDialog({ activeTab = "all" }: AddContactDialogProps) {
                       <FormItem>
                         <FormLabel>Phone</FormLabel>
                         <FormControl>
-                          <Input type="tel" {...field} />
+                          <Input {...field} />
                         </FormControl>
                       </FormItem>
                     )}
@@ -267,18 +283,6 @@ export function AddContactDialog({ activeTab = "all" }: AddContactDialogProps) {
                     )}
                   />
                 </div>
-                <FormField
-                  control={form.control}
-                  name="website"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Website</FormLabel>
-                      <FormControl>
-                        <Input {...field} />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-4">
                     <FormLabel>Social Media</FormLabel>
@@ -367,9 +371,14 @@ export function AddContactDialog({ activeTab = "all" }: AddContactDialogProps) {
                       name="address.state"
                       render={({ field }) => (
                         <FormItem>
+                          <FormLabel>State</FormLabel>
                           <FormControl>
-                            <Input placeholder="State" {...field} />
+                            <StateCombobox
+                              value={field.value}
+                              onChange={field.onChange}
+                            />
                           </FormControl>
+                          <FormMessage />
                         </FormItem>
                       )}
                     />
@@ -384,55 +393,76 @@ export function AddContactDialog({ activeTab = "all" }: AddContactDialogProps) {
                         </FormItem>
                       )}
                     />
-                    <FormField
-                      control={form.control}
-                      name="address.country"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormControl>
-                            <Input placeholder="Country" {...field} />
-                          </FormControl>
-                        </FormItem>
-                      )}
-                    />
                   </div>
                 </div>
-                <FormField
-                  control={form.control}
-                  name="category"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Category</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Select a category" {...field} />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="segments"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Segments</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Select a category to view segments" {...field} />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="tags"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Tags (comma-separated)</FormLabel>
-                      <FormControl>
-                        <Input {...field} />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <FormField
+                    control={form.control}
+                    name="website"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Website</FormLabel>
+                        <FormControl>
+                          <Input 
+                            defaultValue="https://"
+                            {...field}
+                            onChange={(e) => {
+                              let value = e.target.value;
+                              if (!value.startsWith('https://')) {
+                                value = 'https://' + value.replace('https://', '');
+                              }
+                              field.onChange(value);
+                            }}
+                            onFocus={(e) => {
+                              if (e.target.value === 'https://') {
+                                e.target.setSelectionRange(8, 8);
+                              }
+                            }}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="address.country"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Country</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Country" {...field} />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <FormField
+                    control={form.control}
+                    name="category"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Category</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Select a category" {...field} />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="tags"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Tags (comma-separated)</FormLabel>
+                        <FormControl>
+                          <Input {...field} />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+                </div>
                 <FormField
                   control={form.control}
                   name="notes"
@@ -440,7 +470,7 @@ export function AddContactDialog({ activeTab = "all" }: AddContactDialogProps) {
                     <FormItem>
                       <FormLabel>Notes</FormLabel>
                       <FormControl>
-                        <Input {...field} />
+                        <Input type="text" {...field} />
                       </FormControl>
                     </FormItem>
                   )}
@@ -455,18 +485,48 @@ export function AddContactDialog({ activeTab = "all" }: AddContactDialogProps) {
           <TabsContent value="business">
             <Form {...form}>
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 mt-4">
-                <FormField
-                  control={form.control}
-                  name="company"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Company</FormLabel>
-                      <FormControl>
-                        <Input {...field} />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <FormField
+                    control={form.control}
+                    name="company"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Business Name</FormLabel>
+                        <FormControl>
+                          <Input {...field} />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="website"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Website</FormLabel>
+                        <FormControl>
+                          <Input 
+                            defaultValue="https://"
+                            {...field}
+                            onChange={(e) => {
+                              let value = e.target.value;
+                              if (!value.startsWith('https://')) {
+                                value = 'https://' + value.replace('https://', '');
+                              }
+                              field.onChange(value);
+                            }}
+                            onFocus={(e) => {
+                              if (e.target.value === 'https://') {
+                                e.target.setSelectionRange(8, 8);
+                              }
+                            }}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
                 <div className="grid gap-4 sm:grid-cols-2">
                   <FormField
                     control={form.control}
@@ -475,7 +535,7 @@ export function AddContactDialog({ activeTab = "all" }: AddContactDialogProps) {
                       <FormItem>
                         <FormLabel>Email</FormLabel>
                         <FormControl>
-                          <Input type="email" {...field} />
+                          <Input {...field} />
                         </FormControl>
                       </FormItem>
                     )}
@@ -486,32 +546,6 @@ export function AddContactDialog({ activeTab = "all" }: AddContactDialogProps) {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Phone</FormLabel>
-                        <FormControl>
-                          <Input type="tel" {...field} />
-                        </FormControl>
-                      </FormItem>
-                    )}
-                  />
-                </div>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <FormField
-                    control={form.control}
-                    name="website"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Website</FormLabel>
-                        <FormControl>
-                          <Input {...field} />
-                        </FormControl>
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="jobTitle"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Job Title</FormLabel>
                         <FormControl>
                           <Input {...field} />
                         </FormControl>
@@ -546,22 +580,22 @@ export function AddContactDialog({ activeTab = "all" }: AddContactDialogProps) {
                     />
                     <FormField
                       control={form.control}
-                      name="socialMedia.instagram"
+                      name="socialMedia.facebook"
                       render={({ field }) => (
                         <FormItem>
                           <FormControl>
-                            <Input placeholder="Instagram" {...field} />
+                            <Input placeholder="Facebook" {...field} />
                           </FormControl>
                         </FormItem>
                       )}
                     />
                     <FormField
                       control={form.control}
-                      name="socialMedia.facebook"
+                      name="socialMedia.instagram"
                       render={({ field }) => (
                         <FormItem>
                           <FormControl>
-                            <Input placeholder="Facebook" {...field} />
+                            <Input placeholder="Instagram" {...field} />
                           </FormControl>
                         </FormItem>
                       )}
@@ -607,9 +641,14 @@ export function AddContactDialog({ activeTab = "all" }: AddContactDialogProps) {
                       name="address.state"
                       render={({ field }) => (
                         <FormItem>
+                          <FormLabel>State</FormLabel>
                           <FormControl>
-                            <Input placeholder="State" {...field} />
+                            <StateCombobox
+                              value={field.value}
+                              onChange={field.onChange}
+                            />
                           </FormControl>
+                          <FormMessage />
                         </FormItem>
                       )}
                     />
@@ -624,55 +663,48 @@ export function AddContactDialog({ activeTab = "all" }: AddContactDialogProps) {
                         </FormItem>
                       )}
                     />
-                    <FormField
-                      control={form.control}
-                      name="address.country"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormControl>
-                            <Input placeholder="Country" {...field} />
-                          </FormControl>
-                        </FormItem>
-                      )}
-                    />
                   </div>
                 </div>
-                <FormField
-                  control={form.control}
-                  name="category"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Category</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Select a category" {...field} />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="segments"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Segments</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Select a category to view segments" {...field} />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="tags"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Tags (comma-separated)</FormLabel>
-                      <FormControl>
-                        <Input {...field} />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <FormField
+                    control={form.control}
+                    name="address.country"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Country</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Country" {...field} />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <FormField
+                    control={form.control}
+                    name="category"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Category</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Select a category" {...field} />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="tags"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Tags (comma-separated)</FormLabel>
+                        <FormControl>
+                          <Input {...field} />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+                </div>
                 <FormField
                   control={form.control}
                   name="notes"
@@ -680,7 +712,7 @@ export function AddContactDialog({ activeTab = "all" }: AddContactDialogProps) {
                     <FormItem>
                       <FormLabel>Notes</FormLabel>
                       <FormControl>
-                        <Input {...field} />
+                        <Input type="text" {...field} />
                       </FormControl>
                     </FormItem>
                   )}

@@ -10,7 +10,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Contact } from "@/lib/types";
+import { Contact, IndividualContact, BusinessContact } from "@/lib/firebase/types";
 import { useState } from "react";
 import { updateContact, deleteContact } from "@/lib/firebase/services";
 import { toast } from "sonner";
@@ -21,6 +21,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { X } from "lucide-react";
+import { StateCombobox } from "../ui/state-combobox";
 
 interface EditContactDialogProps {
   open: boolean;
@@ -35,67 +37,77 @@ export function EditContactDialog({
   contact,
   onContactUpdated,
 }: EditContactDialogProps) {
-  const [formData, setFormData] = useState<Partial<Contact>>({
+  const [formData, setFormData] = useState<Contact>(() => ({
     ...contact,
-    streetAddress: contact.address?.street || "",
-    suite: contact.address?.suite || "",
-    city: contact.address?.city || "",
-    state: contact.address?.state || "",
-    zipCode: contact.address?.zipCode || "",
-    country: contact.address?.country || "",
-    linkedin: contact.socialMedia?.linkedin || "",
-    twitter: contact.socialMedia?.twitter || "",
-    instagram: contact.socialMedia?.instagram || "",
-    facebook: contact.socialMedia?.facebook || "",
-    tags: contact.tags || [],
-  });
+    address: {
+      street: contact.address?.street ?? '',
+      suite: contact.address?.suite ?? '',
+      city: contact.address?.city ?? '',
+      state: contact.address?.state ?? '',
+      zipCode: contact.address?.zipCode ?? '',
+      country: contact.address?.country ?? ''
+    },
+    socialMedia: {
+      linkedin: contact.socialMedia?.linkedin ?? '',
+      twitter: contact.socialMedia?.twitter ?? '',
+      facebook: contact.socialMedia?.facebook ?? '',
+      instagram: contact.socialMedia?.instagram ?? ''
+    }
+  }));
+
+  // Type guard functions
+  const isIndividualContact = (contact: Contact): contact is IndividualContact => {
+    return contact.type === 'individual';
+  };
+
+  const isBusinessContact = (contact: Contact): contact is BusinessContact => {
+    return contact.type === 'business';
+  };
+
+  // Get type-safe field values
+  const getFieldValue = (field: string): string => {
+    if (field === 'firstName' && isIndividualContact(formData)) {
+      return formData.firstName ?? '';
+    }
+    if (field === 'lastName' && isIndividualContact(formData)) {
+      return formData.lastName ?? '';
+    }
+    if (field === 'jobTitle' && isIndividualContact(formData)) {
+      return formData.jobTitle ?? '';
+    }
+    if (field === 'companyName' && isBusinessContact(formData)) {
+      return formData.businessName ?? '';
+    }
+    return '';
+  };
 
   const handleInputChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+    setFormData((prev) => {
+      if (name.includes('.')) {
+        const [parent, child] = name.split('.');
+        return {
+          ...prev,
+          [parent]: {
+            ...(prev[parent as keyof typeof prev] as Record<string, string>),
+            [child]: value
+          }
+        };
+      }
+      return { ...prev, [name]: value };
+    });
   };
 
   const handleSelectChange = (value: string, field: string) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
+    setFormData((prev: Contact) => ({ ...prev, [field]: value }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      // Process tags from comma-separated string to array and restructure address and social media
-      const processedData = {
-        ...formData,
-        address: {
-          street: formData.streetAddress || "",
-          suite: formData.suite || "",
-          city: formData.city || "",
-          state: formData.state || "",
-          zipCode: formData.zipCode || "",
-          country: formData.country || "",
-        },
-        socialMedia: {
-          linkedin: formData.linkedin || "",
-          twitter: formData.twitter || "",
-          instagram: formData.instagram || "",
-          facebook: formData.facebook || "",
-        },
-      };
-
-      // Remove the flat fields before saving
-      delete processedData.streetAddress;
-      delete processedData.suite;
-      delete processedData.city;
-      delete processedData.state;
-      delete processedData.zipCode;
-      delete processedData.country;
-      delete processedData.linkedin;
-      delete processedData.twitter;
-      delete processedData.instagram;
-      delete processedData.facebook;
-
-      await updateContact(contact.id!, processedData);
+      await updateContact(contact.id!, formData);
       toast.success("Contact updated successfully");
       onContactUpdated();
       onOpenChange(false);
@@ -121,24 +133,32 @@ export function EditContactDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
+      <DialogContent className="max-h-[80vh] max-w-2xl overflow-y-auto">
+        <DialogHeader className="sticky top-0 bg-background z-50 pb-4 mb-4 border-b">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="absolute right-0 top-0"
+            onClick={() => onOpenChange(false)}
+          >
+            <X className="h-4 w-4" />
+          </Button>
           <DialogTitle>Edit Contact</DialogTitle>
           <DialogDescription>
             Update contact information below.
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit}>
+        <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid gap-4 py-4">
-            {contact.type === "individual" ? (
+            {formData.type === 'individual' ? (
               <>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-4 sm:grid-cols-2">
                   <div>
                     <Label htmlFor="firstName">First Name</Label>
                     <Input
                       id="firstName"
                       name="firstName"
-                      value={formData.firstName || ""}
+                      value={getFieldValue('firstName')}
                       onChange={handleInputChange}
                     />
                   </div>
@@ -147,25 +167,76 @@ export function EditContactDialog({
                     <Input
                       id="lastName"
                       name="lastName"
-                      value={formData.lastName || ""}
+                      value={getFieldValue('lastName')}
                       onChange={handleInputChange}
+                    />
+                  </div>
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <Label htmlFor="jobTitle">Job Title</Label>
+                    <Input
+                      id="jobTitle"
+                      name="jobTitle"
+                      value={getFieldValue('jobTitle')}
+                      onChange={handleInputChange}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="website">Website</Label>
+                    <Input
+                      name="website"
+                      value={formData.website || "https://"}
+                      onChange={(e) => {
+                        let value = e.target.value;
+                        if (!value.startsWith('https://')) {
+                          value = 'https://' + value.replace('https://', '');
+                        }
+                        setFormData((prev) => ({ ...prev, website: value }));
+                      }}
+                      onFocus={(e) => {
+                        if (e.target.value === 'https://') {
+                          e.target.setSelectionRange(8, 8);
+                        }
+                      }}
                     />
                   </div>
                 </div>
               </>
             ) : (
-              <div>
-                <Label htmlFor="companyName">Company Name</Label>
-                <Input
-                  id="companyName"
-                  name="companyName"
-                  value={formData.companyName || ""}
-                  onChange={handleInputChange}
-                />
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <Label htmlFor="companyName">Company Name</Label>
+                  <Input
+                    id="companyName"
+                    name="businessName"
+                    value={getFieldValue('companyName')}
+                    onChange={handleInputChange}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="website">Website</Label>
+                  <Input
+                    name="website"
+                    value={formData.website || "https://"}
+                    onChange={(e) => {
+                      let value = e.target.value;
+                      if (!value.startsWith('https://')) {
+                        value = 'https://' + value.replace('https://', '');
+                      }
+                      setFormData((prev) => ({ ...prev, website: value }));
+                    }}
+                    onFocus={(e) => {
+                      if (e.target.value === 'https://') {
+                        e.target.setSelectionRange(8, 8);
+                      }
+                    }}
+                  />
+                </div>
               </div>
             )}
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-4 sm:grid-cols-2">
               <div>
                 <Label htmlFor="email">Email</Label>
                 <Input
@@ -187,117 +258,114 @@ export function EditContactDialog({
               </div>
             </div>
 
-            <div>
-              <Label htmlFor="website">Website</Label>
-              <Input
-                id="website"
-                name="website"
-                value={formData.website || ""}
-                onChange={handleInputChange}
-              />
-            </div>
-
-            <div className="grid gap-2">
-              <Label>Social Media</Label>
-              <Input
-                placeholder="LinkedIn"
-                name="linkedin"
-                value={formData.linkedin || ""}
-                onChange={handleInputChange}
-              />
-              <Input
-                placeholder="Twitter"
-                name="twitter"
-                value={formData.twitter || ""}
-                onChange={handleInputChange}
-              />
-              <Input
-                placeholder="Instagram"
-                name="instagram"
-                value={formData.instagram || ""}
-                onChange={handleInputChange}
-              />
-              <Input
-                placeholder="Facebook"
-                name="facebook"
-                value={formData.facebook || ""}
-                onChange={handleInputChange}
-              />
-            </div>
-
-            <div className="grid gap-2">
-              <Label>Address</Label>
-              <Input
-                placeholder="Street Address"
-                name="streetAddress"
-                value={formData.streetAddress || ""}
-                onChange={handleInputChange}
-              />
-              <Input
-                placeholder="Apt, Suite, etc."
-                name="suite"
-                value={formData.suite || ""}
-                onChange={handleInputChange}
-              />
-              <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-4">
+                <Label>Social Media</Label>
                 <Input
-                  placeholder="City"
-                  name="city"
-                  value={formData.city || ""}
+                  placeholder="LinkedIn"
+                  name="socialMedia.linkedin"
+                  value={formData.socialMedia?.linkedin || ""}
                   onChange={handleInputChange}
                 />
                 <Input
-                  placeholder="State"
-                  name="state"
-                  value={formData.state || ""}
+                  placeholder="Twitter"
+                  name="socialMedia.twitter"
+                  value={formData.socialMedia?.twitter || ""}
+                  onChange={handleInputChange}
+                />
+                <Input
+                  placeholder="Instagram"
+                  name="socialMedia.instagram"
+                  value={formData.socialMedia?.instagram || ""}
+                  onChange={handleInputChange}
+                />
+                <Input
+                  placeholder="Facebook"
+                  name="socialMedia.facebook"
+                  value={formData.socialMedia?.facebook || ""}
                   onChange={handleInputChange}
                 />
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-4">
+                <Label>Address</Label>
+                <Input
+                  placeholder="Street Address"
+                  name="address.street"
+                  value={formData.address?.street || ""}
+                  onChange={handleInputChange}
+                />
+                <Input
+                  placeholder="Apt, Suite, etc."
+                  name="address.suite"
+                  value={formData.address?.suite || ""}
+                  onChange={handleInputChange}
+                />
+                <Input
+                  placeholder="City"
+                  name="address.city"
+                  value={formData.address?.city || ""}
+                  onChange={handleInputChange}
+                />
+                <div>
+                  <Label htmlFor="state">State</Label>
+                  <StateCombobox
+                    value={formData.address?.state || ""}
+                    onChange={(value) => {
+                      setFormData((prev) => ({
+                        ...prev,
+                        address: {
+                          ...prev.address,
+                          state: value,
+                        },
+                      }));
+                    }}
+                  />
+                </div>
                 <Input
                   placeholder="ZIP Code"
-                  name="zipCode"
-                  value={formData.zipCode || ""}
+                  name="address.zipCode"
+                  value={formData.address?.zipCode || ""}
                   onChange={handleInputChange}
                 />
                 <Input
                   placeholder="Country"
-                  name="country"
-                  value={formData.country || ""}
+                  name="address.country"
+                  value={formData.address?.country || ""}
                   onChange={handleInputChange}
                 />
               </div>
             </div>
 
-            <div>
-              <Label htmlFor="category">Category</Label>
-              <Select
-                value={formData.category || ""}
-                onValueChange={(value) => handleSelectChange(value, "category")}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a category" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="client">Client</SelectItem>
-                  <SelectItem value="prospect">Prospect</SelectItem>
-                  <SelectItem value="partner">Partner</SelectItem>
-                  <SelectItem value="vendor">Vendor</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <Label htmlFor="tags">Tags</Label>
-              <Input
-                id="tags"
-                name="tags"
-                value={formData.tags.join(", ") || ""}
-                onChange={(e) => {
-                  const tags = e.target.value.split(",");
-                  setFormData((prev) => ({ ...prev, tags: tags.map((tag) => tag.trim()) }));
-                }}
-              />
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <Label htmlFor="category">Category</Label>
+                <Select
+                  value={formData.category || ""}
+                  onValueChange={(value) => handleSelectChange(value, "category")}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="client">Client</SelectItem>
+                    <SelectItem value="prospect">Prospect</SelectItem>
+                    <SelectItem value="partner">Partner</SelectItem>
+                    <SelectItem value="vendor">Vendor</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="tags">Tags (comma-separated)</Label>
+                <Input
+                  id="tags"
+                  name="tags"
+                  value={formData.tags?.join(", ") || ""}
+                  onChange={(e) => {
+                    const tags = e.target.value.split(",");
+                    setFormData((prev: Contact) => ({ ...prev, tags: tags.map((tag) => tag.trim()) }));
+                  }}
+                />
+              </div>
             </div>
 
             <div>
@@ -314,10 +382,12 @@ export function EditContactDialog({
             <Button variant="destructive" type="button" onClick={handleDelete}>
               Delete Contact
             </Button>
-            <Button variant="outline" type="button" onClick={() => onOpenChange(false)}>
-              Cancel
-            </Button>
-            <Button type="submit">Save Changes</Button>
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" type="button" onClick={() => onOpenChange(false)}>
+                Cancel
+              </Button>
+              <Button type="submit">Save Changes</Button>
+            </div>
           </DialogFooter>
         </form>
       </DialogContent>

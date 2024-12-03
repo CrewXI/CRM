@@ -3,10 +3,24 @@
 import React, { useState } from "react"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs"
-import { Checkbox } from "../ui/checkbox"
 import { Button } from "../ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter
+} from "../ui/dialog"
+import { Input } from "../ui/input"
+import { Label } from "../ui/label"
+import { Checkbox } from "../ui/checkbox"
+import { EditContactDialog } from "./edit-contact-dialog"
+import { Contact, IndividualContact, BusinessContact } from "@/lib/firebase/types"
+import { contactsService } from '../../lib/firebase/services';
+import { toast } from "sonner"
+import { FaLinkedin, FaTwitter, FaInstagram, FaFacebook, FaGlobe } from "react-icons/fa"
 import { Facebook, Globe, Instagram, Linkedin, Pencil, Twitter, MoreHorizontal, Trash2 } from 'lucide-react'
-import { type Contact } from "../../types/contacts"
 import { cn } from "../../lib/utils"
 import {
   DropdownMenu,
@@ -15,25 +29,24 @@ import {
   DropdownMenuTrigger,
 } from "../ui/dropdown-menu"
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "../ui/dialog"
-import { Input } from "../ui/input"
-import { Label } from "../ui/label"
-import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
+  SelectGroup,
+  SelectLabel
 } from "../ui/select"
-import { contactsService } from '../../lib/firebase/services';
-import { EditContactDialog } from "./edit-contact-dialog";
 import { Timestamp } from 'firebase/firestore';
+
+// Type guard functions for Contact types
+function isIndividualContact(contact: Contact): contact is IndividualContact {
+  return contact.type === 'individual';
+}
+
+function isBusinessContact(contact: Contact): contact is BusinessContact {
+  return contact.type === 'business';
+}
 
 interface ContactsTableProps {
   data: Contact[]
@@ -42,10 +55,8 @@ interface ContactsTableProps {
 export function ContactsTable({ data }: ContactsTableProps) {
   const [activeTab, setActiveTab] = useState("all")
   const [selectedContacts, setSelectedContacts] = useState<string[]>([])
-  const [showMassEditDialog, setShowMassEditDialog] = useState(false)
+  const [selectedField, setSelectedField] = useState<string>("")
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
-  const [fieldToEdit, setFieldToEdit] = useState<string>("")
-  const [newFieldValue, setNewFieldValue] = useState<string>("")
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
 
   const filteredData = data.filter(contact => {
@@ -70,45 +81,54 @@ export function ContactsTable({ data }: ContactsTableProps) {
     }
   }
 
-  const handleMassEdit = async () => {
-    if (!selectedContacts.length || !fieldToEdit || !newFieldValue) return;
-    
-    try {
-      const updates: Partial<Contact> = {};
-      if (fieldToEdit === 'city' || fieldToEdit === 'state') {
-        updates.address = {
-          [fieldToEdit]: newFieldValue
-        };
-      } else if (fieldToEdit === 'tags') {
-        updates.tags = newFieldValue.split(',').map(tag => tag.trim());
-      } else if (fieldToEdit === 'firstName' || fieldToEdit === 'lastName') {
-        // Ensure these are only applied to individual contacts
-        updates[fieldToEdit] = newFieldValue;
-      } else if (fieldToEdit === 'businessName') {
-        // Ensure this is only applied to business contacts
-        updates[fieldToEdit] = newFieldValue;
-      } else {
-        const field = fieldToEdit as keyof Omit<Contact, 'type' | 'address' | 'tags' | 'firstName' | 'lastName' | 'businessName'>;
-        
-        // Check if the field is a Timestamp field
-        if (field === 'dateAdded' || field === 'lastModified') {
-          // Skip updating these fields directly
-          console.warn(`Cannot directly modify ${field} field`);
-        } else {
-          updates[field] = newFieldValue;
+  const handleMassEdit = () => {
+    if (selectedField && selectedContacts.length > 0) {
+      const dialog = document.createElement('dialog');
+      dialog.innerHTML = `
+        <div class="p-4">
+          <h2 class="text-lg font-semibold mb-4">Edit ${selectedField}</h2>
+          <div class="mb-4">
+            <input type="text" id="massEditValue" class="w-full p-2 border rounded" />
+          </div>
+          <div class="flex justify-end gap-2">
+            <button id="cancelMassEdit" class="px-4 py-2 border rounded">Cancel</button>
+            <button id="confirmMassEdit" class="px-4 py-2 bg-primary text-white rounded">Save</button>
+          </div>
+        </div>
+      `;
+
+      dialog.querySelector('#cancelMassEdit')?.addEventListener('click', () => {
+        dialog.close();
+        document.body.removeChild(dialog);
+      });
+
+      dialog.querySelector('#confirmMassEdit')?.addEventListener('click', async () => {
+        const value = (dialog.querySelector('#massEditValue') as HTMLInputElement)?.value;
+        if (value) {
+          try {
+            const updates: any = {};
+            if (selectedField.includes('.')) {
+              const [parent, child] = selectedField.split('.');
+              updates[parent] = { [child]: value };
+            } else {
+              updates[selectedField] = value;
+            }
+            
+            await contactsService.updateContacts(selectedContacts, updates);
+            toast.success(`Updated ${selectedField} for ${selectedContacts.length} contacts`);
+          } catch (error) {
+            console.error("Error updating contacts:", error);
+            toast.error("Failed to update contacts");
+          }
         }
-      }
-      
-      await contactsService.updateContacts(selectedContacts, updates);
-      setShowMassEditDialog(false);
-      setSelectedContacts([]);
-      setFieldToEdit("");
-      setNewFieldValue("");
-    } catch (error) {
-      console.error("Error updating contacts:", error);
-      // TODO: Add error handling UI
+        dialog.close();
+        document.body.removeChild(dialog);
+      });
+
+      document.body.appendChild(dialog);
+      dialog.showModal();
     }
-  }
+  };
 
   const handleDelete = async () => {
     if (!selectedContacts.length) return;
@@ -122,14 +142,6 @@ export function ContactsTable({ data }: ContactsTableProps) {
       // TODO: Add error handling UI
     }
   }
-
-  const editableFields = [
-    { label: "Category", value: "category" },
-    { label: "Segment", value: "segments" },
-    { label: "Tags", value: "tags" },
-    { label: "City", value: "city" },
-    { label: "State", value: "state" },
-  ]
 
   const formatFirestoreTimestamp = (timestamp?: Timestamp | null) => {
     if (!timestamp) return '-';
@@ -202,8 +214,14 @@ export function ContactsTable({ data }: ContactsTableProps) {
                       onCheckedChange={handleSelectAll}
                     />
                   </TableHead>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Company</TableHead>
+                  {activeTab === "individual" ? (
+                    <TableHead>Name</TableHead>
+                  ) : activeTab === "business" ? (
+                    <TableHead>Business Name</TableHead>
+                  ) : (
+                    <TableHead>Name/Business</TableHead>
+                  )}
+                  {activeTab !== "business" && <TableHead>Company</TableHead>}
                   <TableHead>Email</TableHead>
                   <TableHead>Phone</TableHead>
                   <TableHead>Social</TableHead>
@@ -224,8 +242,16 @@ export function ContactsTable({ data }: ContactsTableProps) {
                         onCheckedChange={(checked) => handleSelectContact(checked as boolean, contact.id)}
                       />
                     </TableCell>
-                    <TableCell>{contact.type === 'individual' ? `${contact.firstName} ${contact.lastName}` : contact.businessName}</TableCell>
-                    <TableCell>{contact.company || '-'}</TableCell>
+                    <TableCell>
+                      {contact.type === 'individual' 
+                        ? `${contact.firstName} ${contact.lastName}`
+                        : contact.businessName}
+                    </TableCell>
+                    {activeTab !== "business" && (
+                      <TableCell>
+                        {contact.type === 'individual' ? (contact.company || '-') : '-'}
+                      </TableCell>
+                    )}
                     <TableCell>{contact.email || '-'}</TableCell>
                     <TableCell>{contact.phone || '-'}</TableCell>
                     <TableCell>
@@ -264,66 +290,37 @@ export function ContactsTable({ data }: ContactsTableProps) {
       {selectedContacts.length > 0 && (
         <div className="fixed bottom-8 right-8 flex items-center gap-2 bg-background p-4 rounded-lg shadow-lg border z-[60]">
           <span className="text-sm font-medium">{selectedContacts.length} selected</span>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline">
-                Actions
-                <MoreHorizontal className="ml-2 h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="z-[100]" style={{ backgroundColor: 'hsl(var(--background))', position: 'relative' }}>
-              <DropdownMenuItem onClick={() => setShowMassEditDialog(true)}>
-                Mass Edit
-              </DropdownMenuItem>
-              <DropdownMenuItem 
-                onClick={() => setShowDeleteDialog(true)}
-                className="text-destructive"
-              >
-                Delete Selected
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <Select
+            value={selectedField}
+            onValueChange={setSelectedField}
+          >
+            <SelectTrigger className="w-[200px]">
+              <SelectValue placeholder="Select field to edit" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value="category">Category</SelectItem>
+                <SelectItem value="tags">Tags</SelectItem>
+                <SelectItem value="address.city">City</SelectItem>
+                <SelectItem value="address.state">State</SelectItem>
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+          <Button 
+            variant="default" 
+            onClick={handleMassEdit}
+            disabled={!selectedField}
+          >
+            Edit Selected
+          </Button>
+          <Button 
+            variant="destructive"
+            onClick={() => setShowDeleteDialog(true)}
+          >
+            Delete Selected
+          </Button>
         </div>
       )}
-
-      {/* Mass Edit Dialog */}
-      <Dialog open={showMassEditDialog} onOpenChange={setShowMassEditDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Mass Edit Contacts</DialogTitle>
-            <DialogDescription>
-              Update the selected field for all {selectedContacts.length} selected contacts.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label>Field to Edit</Label>
-              <Select onValueChange={setFieldToEdit}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select field" />
-                </SelectTrigger>
-                <SelectContent>
-                  {editableFields.map((field) => (
-                    <SelectItem key={field.value} value={field.value}>
-                      {field.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid gap-2">
-              <Label>New Value</Label>
-              <Input value={newFieldValue} onChange={(e) => setNewFieldValue(e.target.value)} />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowMassEditDialog(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleMassEdit}>Save Changes</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
@@ -384,8 +381,14 @@ function ContactsList({ data }: { data: Contact[] }) {
           {data.map((contact) => (
             <TableRow key={contact.id}>
               <TableCell><Checkbox /></TableCell>
-              <TableCell>{contact.type === 'individual' ? `${contact.firstName} ${contact.lastName}` : contact.businessName}</TableCell>
-              <TableCell>{contact.company || '-'}</TableCell>
+              <TableCell>
+                {contact.type === 'individual' 
+                  ? `${contact.firstName} ${contact.lastName}`
+                  : contact.businessName}
+              </TableCell>
+              <TableCell>
+                {contact.type === 'individual' ? (contact.company || '-') : '-'}
+              </TableCell>
               <TableCell>{contact.email || '-'}</TableCell>
               <TableCell>{contact.phone || '-'}</TableCell>
               <TableCell>-</TableCell>

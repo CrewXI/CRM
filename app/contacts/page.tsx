@@ -5,7 +5,7 @@ import { Button } from "../../components/ui/button"
 import { Input } from "../../components/ui/input"
 import { ContactsTable } from "../../components/contacts/contacts-table"
 import { Settings, Search } from 'lucide-react'
-import type { Contact } from "../../types/contacts"
+import type { Contact } from "../../lib/firebase/types"
 import { AddContactDialog } from "../../components/contacts/add-contact-dialog"
 import { useAuth } from "../../contexts/auth-context"
 import { contactsService } from "../../lib/firebase/services"
@@ -43,10 +43,12 @@ export default function ContactsPage() {
   const filteredContacts = contacts.filter(contact => {
     const searchLower = searchTerm.toLowerCase()
     return (
-      contact.firstName?.toLowerCase().includes(searchLower) ||
-      contact.lastName?.toLowerCase().includes(searchLower) ||
+      (contact.type === 'individual' && 
+        (contact.firstName?.toLowerCase().includes(searchLower) ||
+         contact.lastName?.toLowerCase().includes(searchLower))) ||
       contact.email?.toLowerCase().includes(searchLower) ||
-      contact.company?.toLowerCase().includes(searchLower)
+      (contact.type === 'business' && 
+        contact.businessName?.toLowerCase().includes(searchLower))
     )
   })
 
